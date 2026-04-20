@@ -1,0 +1,384 @@
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  type                String?
+  provider            String?
+  provider_account_id String?
+  refresh_token       String?
+  access_token        String?
+  expires_at          DateTime?
+  token_type          String?
+  scope               String?
+  id_token            String?
+  session_state       String?
+
+  @@unique([provider, provider_account_id])
+  @@map("accounts")
+}
+
+enum UserType {
+  ADMIN
+  CUSTOMER
+  VENDOR
+  EVENT_PLANNER
+  PROVIDER
+  EDITOR
+  CLIENT
+}
+
+model User {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  first_name String?   @db.VarChar(255)
+  last_name  String?   @db.VarChar(255)
+  avatar     String?
+  about_me   String?
+  email      String?   @unique
+  address    String?
+  password   String?   @db.VarChar(255)
+  type       UserType? @default(CUSTOMER)
+
+  name     String? @db.VarChar(255)
+  location String? @db.VarChar(255)
+  language String? @db.VarChar(100)
+
+  // billing info  
+  billing_id        String?
+  // stripe connect account 
+  stripe_connect_id String?
+  //user balance
+  balance           Decimal?  @default(0.0) @db.Decimal(10, 2)
+  // email verification
+  email_verified_at DateTime?
+
+  //----------------------------------------
+  bio           String?   @db.Text
+  domain        String?   @unique
+  username      String?   @unique
+  phone_number  String?
+  country       String?
+  state         String?
+  city          String?
+  zip_code      String?
+  gender        String?
+  date_of_birth DateTime? @db.Date
+  approved_at   DateTime?
+  availability  String?
+
+  is_two_factor_enabled Int?      @default(0)
+  two_factor_secret     String?
+  accounts              Account[]
+
+  // --- Conversation & Messaging ---
+  participants Participant[] @relation("participantUser")
+  sentMessages Message[]     @relation("messageSender")
+
+  // --- Notifications ---
+  receivedNotifications Notification[] @relation("notificationReceiver")
+  sentNotifications     Notification[] @relation("notificationSender")
+
+  user_payment_methods UserPaymentMethod[]
+  ucodes               Ucode[]
+  role_users           RoleUser[]
+  payment_transactions PaymentTransaction[]
+
+  @@map("users")
+}
+
+model Ucode {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  status     Int?     @default(1) @db.SmallInt
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  token       String?
+  email       String?
+  expired_at  DateTime?
+  verified_at DateTime?
+
+  @@map("ucodes")
+}
+
+/**
+ * ---------------------------------------------------------------------
+ * Chating and Notification Schema start
+ * ---------------------------------------------------------------------
+ */
+
+model Conversation {
+  id           String        @id @default(cuid())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  messages     Message[]
+  participants Participant[]
+}
+
+model Participant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("participantUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  role     String?  @default("participant")
+  joinedAt DateTime @default(now())
+
+  lastReadAt DateTime?
+
+  @@unique([conversationId, userId])
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  PENDING
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  text      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  status MessageStatus @default(PENDING)
+
+  senderId String
+  sender   User   @relation("messageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  attachments String[] @db.Text
+}
+
+// -------------------------notification schema---------------------------------
+
+model NotificationEvent {
+  id            String         @id @default(uuid())
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @default(now()) @updatedAt
+  deleted_at    DateTime?
+  status        Int?           @default(1) @db.SmallInt
+  type          String?
+  text          String?
+  notifications Notification[]
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
+  deleted_at DateTime?
+  read_at    DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  sender_id String?
+  sender    User?   @relation("notificationSender", fields: [sender_id], references: [id])
+
+  receiver_id String?
+  receiver    User?   @relation("notificationReceiver", fields: [receiver_id], references: [id])
+
+  notification_event_id String?
+  notification_event    NotificationEvent? @relation(fields: [notification_event_id], references: [id])
+
+  entity_id String?
+}
+
+/**
+ * ---------------------------------------------------------------------
+ * Chating and Notification Schema end
+ * ---------------------------------------------------------------------
+ */
+
+/**
+ * ---------------------------------------------------------------------
+ * Role and Permission Schema start
+ * ---------------------------------------------------------------------
+ */
+
+model Role {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status Int?    @default(1) @db.SmallInt
+  title  String?
+  name   String?
+
+  permission_roles PermissionRole[]
+  role_users       RoleUser[]
+  permissions      Permission[]     @relation("PermissionToRole")
+
+  @@map("roles")
+}
+
+model Permission {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status     Int?    @default(1) @db.SmallInt
+  title      String?
+  action     String?
+  subject    String?
+  conditions String?
+  fields     String?
+
+  permission_roles PermissionRole[]
+  roles            Role[]           @relation("PermissionToRole")
+
+  @@map("permissions")
+}
+
+model PermissionRole {
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  permission_id String
+  permission    Permission @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  role_id String
+  role    Role   @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@id([permission_id, role_id])
+  @@map("permission_roles")
+}
+
+model RoleUser {
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  role_id String
+  role    Role   @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([role_id, user_id])
+  @@map("role_users")
+}
+
+/**
+ * ---------------------------------------------------------------------
+ * Role and Permission Schema end
+ * ---------------------------------------------------------------------
+ */
+
+/**
+ * ---------------------------------------------------------------------
+ * Payment Schema start
+ * ---------------------------------------------------------------------
+ */
+
+model UserPaymentMethod {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  payment_method_id String?
+  checkout_id       String?
+
+  @@map("user_payment_methods")
+}
+
+model PaymentTransaction {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  store_id String?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  order_id         String?
+  type             String?  @default("order")
+  withdraw_via     String?  @default("wallet")
+  provider         String?
+  reference_number String?
+  status           String?  @default("pending")
+  raw_status       String?
+  amount           Decimal?
+  currency         String?
+  paid_amount      Decimal?
+  paid_currency    String?
+
+  @@map("payment_transactions")
+}
+
+/**
+ * ---------------------------------------------------------------------
+ * Payment Schema end
+ * ---------------------------------------------------------------------
+ */
+
+/**
+ * ---------------------------------------------------------------------
+ * others Schema start
+ * ---------------------------------------------------------------------
+ */
+
+model Faq {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status     Int?    @default(1) @db.SmallInt
+  sort_order Int?    @default(0)
+  question   String?
+  answer     String?
+
+  @@map("faqs")
+}
+
+model Contact {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  first_name   String?
+  last_name    String?
+  email        String?
+  phone_number String?
+  message      String?
+
+  @@map("contacts")
+}
+
+/**
+ * ---------------------------------------------------------------------
+ * others Schema end
+ * ---------------------------------------------------------------------
+ */

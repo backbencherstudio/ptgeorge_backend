@@ -6,7 +6,6 @@ import {
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { PrismaClient } from '@prisma/client';
 import appConfig from '../../../config/app.config';
 import { DateHelper } from '../../../common/helper/date.helper';
 import { MessageGateway } from '../message/message.gateway';

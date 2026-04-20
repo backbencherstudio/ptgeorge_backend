@@ -484,7 +484,7 @@ export class UserRepository {
           message: 'User not found',
         };
       }
-      if (userDetails.type == UserType.EDITOR) {
+      if ((userDetails.type as string) === 'EDITOR') {
         return {
           success: false,
           message: 'User is already an editor',

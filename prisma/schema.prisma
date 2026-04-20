@@ -32,12 +32,9 @@ model Account {
 
 enum UserType {
   ADMIN
-  CUSTOMER
-  VENDOR
-  EVENT_PLANNER
-  PROVIDER
-  EDITOR
-  CLIENT
+  CHURCH_ADMIN
+  USER
+  PRO_USER
 }
 
 model User {
@@ -47,18 +44,42 @@ model User {
   deleted_at DateTime?
   status     Int?      @default(1) @db.SmallInt
 
-  first_name String?   @db.VarChar(255)
-  last_name  String?   @db.VarChar(255)
-  avatar     String?
-  about_me   String?
-  email      String?   @unique
-  address    String?
-  password   String?   @db.VarChar(255)
-  type       UserType? @default(CUSTOMER)
+  first_name   String? @db.VarChar(255)
+  last_name    String? @db.VarChar(255)
+  phone_number String? @db.VarChar(255)
+  church_name  String? @db.VarChar(255)
+  language     String? @db.VarChar(100)
+
+  email    String?   @unique
+  password String?   @db.VarChar(255)
+  type     UserType? @default(USER)
+
+  // professional setup
+  companmy_name   String? @db.VarChar(255)
+  business_email  String? @db.VarChar(255)
+  business_phone  String? @db.VarChar(255)
+  service         String? @db.VarChar(255)
+  catagory        String? @db.VarChar(255)
+  profession      String? @db.VarChar(255)
+  website         String? @db.VarChar(255)
+  whatsapp_number String? @db.VarChar(255)
+  available_time  String? @db.VarChar(255)
+  address_line1   String? @db.VarChar(255)
+  address_line2   String? @db.VarChar(255)
+  state           String? @db.VarChar(255)
+  country         String? @db.VarChar(255)
+  zip_code        String? @db.VarChar(255)
+
+  business_portfolio String? @db.Text
+  description        String? @db.Text
+
+  // other info
+  avatar   String?
+  about_me String?
+  address  String?
 
   name     String? @db.VarChar(255)
   location String? @db.VarChar(255)
-  language String? @db.VarChar(100)
 
   // billing info  
   billing_id        String?
@@ -70,14 +91,10 @@ model User {
   email_verified_at DateTime?
 
   //----------------------------------------
-  bio           String?   @db.Text
-  domain        String?   @unique
-  username      String?   @unique
-  phone_number  String?
-  country       String?
-  state         String?
+  bio      String? @db.Text
+  domain   String? @unique
+  username String? @unique
   city          String?
-  zip_code      String?
   gender        String?
   date_of_birth DateTime? @db.Date
   approved_at   DateTime?
@@ -94,6 +111,8 @@ model User {
   // --- Notifications ---
   receivedNotifications Notification[] @relation("notificationReceiver")
   sentNotifications     Notification[] @relation("notificationSender")
+
+  // --- Other Relation --- 
 
   user_payment_methods UserPaymentMethod[]
   ucodes               Ucode[]

@@ -15,7 +15,7 @@ export class PaymentTransactionService {
       const userDetails = await this.userRepository.getUserDetails(user_id);
 
       const whereClause = {};
-      if (userDetails.type == UserType.EDITOR) {
+      if ((userDetails.type as string) === 'EDITOR') {
         whereClause['user_id'] = user_id;
       }
 
@@ -56,7 +56,7 @@ export class PaymentTransactionService {
       const userDetails = await this.userRepository.getUserDetails(user_id);
 
       const whereClause = {};
-      if (userDetails.type == UserType.EDITOR) {
+      if ((userDetails.type as string) === 'EDITOR') {
         whereClause['user_id'] = user_id;
       }
 
@@ -104,7 +104,7 @@ export class PaymentTransactionService {
       const userDetails = await this.userRepository.getUserDetails(user_id);
 
       const whereClause = {};
-      if (userDetails.type == UserType.EDITOR) {
+      if ((userDetails.type as string) === 'EDITOR') {
         whereClause['user_id'] = user_id;
       }
 

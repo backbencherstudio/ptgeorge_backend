@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { UserType } from 'prisma/generated/client';
+import { Prisma, UserType } from 'prisma/generated/client';
 import * as QRCode from 'qrcode';
 import * as speakeasy from 'speakeasy';
 import appConfig from '../../../config/app.config';
@@ -34,8 +34,6 @@ export class UserRepository {
     });
     return user;
   }
-
- 
 
   /**
    * get user details
@@ -85,14 +83,20 @@ export class UserRepository {
    */
   async createSuAdminUser({ username, email, password }) {
     try {
-      password = await bcrypt.hash(password, appConfig().security.salt);
+      const hashedPassword = await bcrypt.hash(password, appConfig().security.salt);
+      const firstName = username?.trim() || 'System';
 
       const user = await this.prisma.user.create({
         data: {
-          username: username,
-          email: email,
-          password: password,
+          username,
+          email,
+          password: hashedPassword,
           type: UserType.ADMIN,
+          first_name: firstName,
+          last_name: 'Admin',
+          phone_number: 'N/A',
+          church_name: firstName,
+          language: 'en',
         },
       });
       return user;
@@ -106,39 +110,39 @@ export class UserRepository {
    * @param param0
    * @returns
    */
-  async inviteUser({
-    name,
-    username,
-    email,
-    role_id,
-  }: {
-    name: string;
-    username: string;
-    email: string;
-    role_id: string;
-  }) {
-    try {
-      const user = await this.prisma.user.create({
-        data: {
-          name: name,
-          username: username,
-          email: email,
-        },
-      });
-      if (user) {
-        // attach role
-        await this.attachRole({
-          user_id: user.id,
-          role_id: role_id,
-        });
-        return user;
-      } else {
-        return false;
-      }
-    } catch (error) {
-      throw error;
-    }
-  }
+  // async inviteUser({
+  //   name,
+  //   username,
+  //   email,
+  //   role_id,
+  // }: {
+  //   name: string;
+  //   username: string;
+  //   email: string;
+  //   role_id: string;
+  // }) {
+  //   try {
+  //     const user = await this.prisma.user.create({
+  //       data: {
+  //         name: name,
+  //         username: username,
+  //         email: email,
+  //       },
+  //     });
+  //     if (user) {
+  //       // attach role
+  //       await this.attachRole({
+  //         user_id: user.id,
+  //         role_id: role_id,
+  //       });
+  //       return user;
+  //     } else {
+  //       return false;
+  //     }
+  //   } catch (error) {
+  //     throw error;
+  //   }
+  // }
 
   /**
    * Attach a role to a user
@@ -183,22 +187,43 @@ export class UserRepository {
    */
   async createUser({
     name,
+    first_name,
+    last_name,
+    phone_number,
+    church_name,
+    language,
     email,
     password,
     type,
     role_id,
   }: {
     name?: string;
+    first_name?: string;
+    last_name?: string;
+    phone_number?: string;
+    church_name?: string;
+    language?: string;
     email: string;
     password: string;
     type?: string;
     role_id?: string;
   }) {
     try {
-      const data = {};
+      const normalizedName =
+        name?.trim() || `${first_name || ''} ${last_name || ''}`.trim();
+
+      const data: Prisma.UserCreateInput = {
+        first_name: first_name || normalizedName || 'User',
+        last_name: last_name || 'User',
+        phone_number: phone_number || 'N/A',
+        church_name: church_name || normalizedName || 'N/A',
+        language: language || 'en',
+        email,
+        password: '',
+      };
 
       if (name) {
-        data['name'] = name;
+        data.name = name;
       }
 
       if (email) {
@@ -213,7 +238,6 @@ export class UserRepository {
             message: 'Email already exist',
           };
         }
-
         data['email'] = email;
       }
 
@@ -224,14 +248,17 @@ export class UserRepository {
         );
       }
 
-      if (type && ArrayHelper.inArray(type, Object.values(Role))) {
-        data['type'] = type;
+      if (type && Object.values(UserType).includes(type as UserType)) {
+        data['type'] = type as UserType;
+      } else if (type) {
+        return {
+          success: false,
+          message: 'Invalid user type',
+        };
       }
 
       const user = await this.prisma.user.create({
-        data: {
-          ...data,
-        },
+        data: data,
       });
 
       if (user) {
@@ -254,7 +281,7 @@ export class UserRepository {
           message: 'User creation failed',
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -361,7 +388,7 @@ export class UserRepository {
           message: 'User update failed',
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -398,7 +425,7 @@ export class UserRepository {
         success: true,
         message: 'User deleted successfully',
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -425,7 +452,7 @@ export class UserRepository {
         },
       });
       return user;
-    } catch (error) {
+    } catch (error: any) {
       throw error;
     }
   }
@@ -448,7 +475,7 @@ export class UserRepository {
         },
       });
       return user;
-    } catch (error) {
+    } catch (error: any) {
       throw error;
     }
   }
@@ -499,7 +526,7 @@ export class UserRepository {
         success: true,
         message: 'Converted to ' + type + ' successfully',
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,

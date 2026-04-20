@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { UserType } from 'prisma/generated/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 @Injectable()
@@ -11,7 +12,7 @@ export class UserService {
         where: {
           status: 1,
           type: {
-            not: 'CLIENT',
+            not: UserType.ADMIN,
           },
         },
         select: {
@@ -26,7 +27,7 @@ export class UserService {
         success: true,
         data: users,
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,

@@ -5,6 +5,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Account {
@@ -44,22 +45,22 @@ model User {
   deleted_at DateTime?
   status     Int?      @default(1) @db.SmallInt
 
-  first_name   String? @db.VarChar(255)
-  last_name    String? @db.VarChar(255)
-  phone_number String? @db.VarChar(255)
-  church_name  String? @db.VarChar(255)
-  language     String? @db.VarChar(100)
+  first_name   String @db.VarChar(255)
+  last_name    String @db.VarChar(255)
+  phone_number String @db.VarChar(255)
+  church_name  String @db.VarChar(255)
+  language     String @db.VarChar(100)
 
-  email    String?   @unique
-  password String?   @db.VarChar(255)
+  email    String  @unique
+  password String  @db.VarChar(255)
   type     UserType? @default(USER)
 
   // professional setup
-  companmy_name   String? @db.VarChar(255)
+  company_name   String? @db.VarChar(255)
   business_email  String? @db.VarChar(255)
   business_phone  String? @db.VarChar(255)
   service         String? @db.VarChar(255)
-  catagory        String? @db.VarChar(255)
+  category        String? @db.VarChar(255)
   profession      String? @db.VarChar(255)
   website         String? @db.VarChar(255)
   whatsapp_number String? @db.VarChar(255)

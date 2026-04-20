@@ -11,22 +11,39 @@ import { UserType } from 'prisma/generated';
 
 export class CreateUserDto {
  
-  @ApiPropertyOptional({ example: 'John Doe' })
+  @ApiProperty({ example: 'John Doe' })
   @IsString()
-  @IsOptional()
-  name?: string;
+  @IsNotEmpty()
+  first_name: string;
 
-  // @IsNotEmpty()
-  // @ApiProperty()
-  // first_name?: string;
+  @ApiProperty({ example: 'Doe' })
+  @IsString()
+  @IsNotEmpty()
+  last_name: string;
 
-  // @IsNotEmpty()
-  // @ApiProperty()
-  // last_name?: string;
 
-  // @IsNotEmpty()
-  // @ApiProperty()
-  // address?: string;
+  @ApiProperty({ example: '088+123456789' })
+  @IsString()
+  @IsNotEmpty()
+  phone_number: string;
+
+  @ApiProperty({ example: 'churchname' })
+  @IsString()
+  @IsNotEmpty()
+  church_name: string;
+
+  @ApiProperty({ example: 'bangla' })
+  @IsString()
+  @IsNotEmpty()
+  language: string;
+
+  // ------ professional setup
+
+  @ApiProperty({ example: 'Pas' })
+
+
+
+  // ------ email,password and type
 
   @ApiProperty({ example: 'john@example.com' })
   @IsEmail()
@@ -38,7 +55,7 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({
     enum: UserType,
-    default: UserType.CLIENT,
+    default: UserType.USER,
   })
   @IsOptional()
   @IsEnum(UserType)

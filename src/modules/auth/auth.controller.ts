@@ -53,26 +53,53 @@ export class AuthController {
   async create(@Body() data: CreateUserDto) {
     try {
      
-      const name = data.name;
+      const first_name = data.first_name;
+      const last_name = data.last_name;
+      const phone_number = data.phone_number;
+      const church_name = data.church_name;
+      const language = data.language;
+
       const email = data.email;
       const password = data.password;
       const type = data.type;
 
 
-      if (!name) {
-        throw new HttpException('Name not provided', HttpStatus.UNAUTHORIZED);
+
+      if (!first_name) {
+        throw new HttpException('First name not provided', HttpStatus.UNAUTHORIZED);
+      }
+
+      if (!last_name) {
+        throw new HttpException('Last name not provided', HttpStatus.UNAUTHORIZED);
+      }
+
+      if (!phone_number) {
+        throw new HttpException('Phone number not provided', HttpStatus.UNAUTHORIZED);
+      }
+      
+      if (!church_name) {
+        throw new HttpException('Church name not provided', HttpStatus.UNAUTHORIZED);
+      }
+
+      if (!language) {
+        throw new HttpException('Language not provided', HttpStatus.UNAUTHORIZED);
       }
 
       if (!email) {
         throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
       }
+      
       if (!password) {
-        throw new HttpException('Password not provided',HttpStatus.UNAUTHORIZED,);
+        throw new HttpException('Password not provided', HttpStatus.UNAUTHORIZED);
       }
      
 
       const response = await this.authService.register({
-        name: name,
+        first_name: first_name,
+        last_name: last_name,
+        phone_number: phone_number,
+        church_name: church_name,
+        language: language,
         email: email,
         password: password,
         type: type,

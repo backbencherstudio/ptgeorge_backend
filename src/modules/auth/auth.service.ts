@@ -77,12 +77,20 @@ export class AuthService {
   }
   // done
   async register({
-    name,
+    first_name,
+    last_name,
+    phone_number,
+    church_name,
+    language,
     email,
     password,
     type,
   }: {
-    name: string;
+    first_name: string;
+    last_name: string;
+    phone_number: string;
+    church_name: string;
+    language: string;
     email: string;
     password: string;
     type?: string;
@@ -102,7 +110,11 @@ export class AuthService {
       }
 
       const user = await this.userRepository.createUser({
-        name: name,
+        first_name: first_name,
+        last_name: last_name,
+        phone_number: phone_number,
+        church_name: church_name,
+        language: language,
         email: email,
         password: password,
         type: type,
@@ -119,7 +131,7 @@ export class AuthService {
       const stripeCustomer = await StripePayment.createCustomer({
         user_id: user.data.id,
         email: email,
-        name: name,
+        name: `${first_name} ${last_name}`,
       });
 
       if (stripeCustomer) {
@@ -144,7 +156,7 @@ export class AuthService {
       // send otp code to email
       await this.mailService.sendOtpCodeToEmail({
         email: email,
-        name: name,
+        name: `${first_name} ${last_name}`,
         otp: token,
       });
 

@@ -29,7 +29,7 @@ export class UserService {
           message: user.message,
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -85,7 +85,7 @@ export class UserService {
         success: true,
         data: users,
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -131,7 +131,7 @@ export class UserService {
         success: true,
         data: user,
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -158,7 +158,7 @@ export class UserService {
         success: true,
         message: 'User approved successfully',
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -185,7 +185,7 @@ export class UserService {
         success: true,
         message: 'User rejected successfully',
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -208,7 +208,7 @@ export class UserService {
           message: user.message,
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,
@@ -220,7 +220,7 @@ export class UserService {
     try {
       const user = await this.userRepository.deleteUser(id);
       return user;
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         message: error.message,

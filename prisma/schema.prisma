@@ -142,6 +142,38 @@ model Ucode {
 
 /**
  * ---------------------------------------------------------------------
+ * Church Details Schema start
+ * ---------------------------------------------------------------------
+ */
+
+model Church {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  church_name String? @db.VarChar(255)
+  church_city String? @db.VarChar(255)
+  church_email String? @db.VarChar(255)
+  church_domain String? @db.VarChar(255)
+  church_password String? @db.VarChar(255)
+  church_adminname String? @db.VarChar(255)
+
+
+}
+ 
+
+
+
+
+/**
+ * ---------------------------------------------------------------------
+ * Church Details Schema end
+ * ---------------------------------------------------------------------
+ */
+
+/**
+ * ---------------------------------------------------------------------
  * Chating and Notification Schema start
  * ---------------------------------------------------------------------
  */

@@ -11,6 +11,7 @@ import {
 import { UserType } from 'prisma/generated';
 
 export class CreateUserDto {
+ 
   @ApiProperty({ example: 'John Doe' })
   @IsString()
   @IsNotEmpty()

@@ -186,7 +186,6 @@ export class UserRepository {
    * @returns
    */
   async createUser({
-    name,
     first_name,
     last_name,
     phone_number,
@@ -197,7 +196,6 @@ export class UserRepository {
     type,
     role_id,
   }: {
-    name?: string;
     first_name?: string;
     last_name?: string;
     phone_number?: string;
@@ -209,21 +207,27 @@ export class UserRepository {
     role_id?: string;
   }) {
     try {
-      const normalizedName =
-        name?.trim() || `${first_name || ''} ${last_name || ''}`.trim();
+      
+      const data: any = {};
 
-      const data: Prisma.UserCreateInput = {
-        first_name: first_name || normalizedName || 'User',
-        last_name: last_name || 'User',
-        phone_number: phone_number || 'N/A',
-        church_name: church_name || normalizedName || 'N/A',
-        language: language || 'en',
-        email,
-        password: '',
-      };
+      if (first_name) {
+        data['first_name'] = first_name;
+      }
 
-      if (name) {
-        data.name = name;
+      if (last_name) {
+        data['last_name'] = last_name;
+      }
+
+      if (phone_number) {
+        data['phone_number'] = phone_number;
+      }
+
+      if (church_name) {
+        data['church_name'] = church_name;
+      }
+      
+      if (language) {
+        data['language'] = language;
       }
 
       if (email) {

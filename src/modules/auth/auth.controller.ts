@@ -25,6 +25,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { first } from 'rxjs';
 import { CreateChurchDto } from './dto/create-church.dto';
+import { ChurchLoginDto } from './dto/login-church.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -414,6 +415,38 @@ export class AuthController {
 
   }
   
+
+  // church auth
+  @Post('church/login') 
+  async churchLogin(
+    @Body() dto: ChurchLoginDto,
+
+  ) {
+    try {
+      const church_email = dto.church_email;
+      const church_password = dto.church_password;
+
+      if (!church_email) {
+        throw new HttpException('Church email not provided', HttpStatus.UNAUTHORIZED);
+      }
+      
+      if (!church_password) {
+        throw new HttpException('Church password not provided', HttpStatus.UNAUTHORIZED);
+      }
+
+      const response = await this.authService.churchLogin(
+        church_email, 
+        church_password
+      );
+      return response;
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
 
 
   //-----------------------------------------------(end)----------------------------------------------------------------------

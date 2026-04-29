@@ -83,7 +83,10 @@ export class UserRepository {
    */
   async createSuAdminUser({ username, email, password }) {
     try {
-      const hashedPassword = await bcrypt.hash(password, appConfig().security.salt);
+      const hashedPassword = await bcrypt.hash(
+        password,
+        appConfig().security.salt,
+      );
       const firstName = username?.trim() || 'System';
 
       const user = await this.prisma.user.create({
@@ -207,7 +210,6 @@ export class UserRepository {
     role_id?: string;
   }) {
     try {
-      
       const data: any = {};
 
       if (first_name) {
@@ -225,7 +227,7 @@ export class UserRepository {
       if (church_name) {
         data['church_name'] = church_name;
       }
-      
+
       if (language) {
         data['language'] = language;
       }
@@ -293,33 +295,30 @@ export class UserRepository {
     }
   }
 
-   
   /**
    * create a church with
    */
   async createChurch({
-  church_name,
-  church_city,
-  church_email,
-  church_domain,
-  church_password,
-  church_adminname,
-  status,
-  auth_type,
-}: {
-  church_name: string;
-  church_city: string;
-  church_email: string;
-  church_domain: string;
-  church_password: string;
-  church_adminname?: string;
-  status?: string;
-  auth_type?: string;
+    church_name,
+    church_city,
+    church_email,
+    church_domain,
+    church_password,
+    church_adminname,
+    status,
+    auth_type,
+  }: {
+    church_name: string;
+    church_city: string;
+    church_email: string;
+    church_domain: string;
+    church_password: string;
+    church_adminname?: string;
+    status?: string;
+    auth_type?: string;
   }) {
-
     try {
-      
-      const data: any = {}
+      const data: any = {};
 
       if (church_name) {
         data['church_name'] = church_name;
@@ -328,7 +327,7 @@ export class UserRepository {
       if (church_city) {
         data['church_city'] = church_city;
       }
-      
+
       if (church_email) {
         data['church_email'] = church_email;
       }
@@ -340,7 +339,7 @@ export class UserRepository {
       if (church_password) {
         data['church_password'] = await bcrypt.hash(
           church_password,
-          appConfig().security.salt
+          appConfig().security.salt,
         );
       }
 
@@ -360,12 +359,11 @@ export class UserRepository {
         data: data,
       });
 
-       return {
-          success: true,
-          message: 'Church created successfully',
-          data: church,
-        };
-
+      return {
+        success: true,
+        message: 'Church created successfully',
+        data: church,
+      };
     } catch (error: any) {
       return {
         success: false,

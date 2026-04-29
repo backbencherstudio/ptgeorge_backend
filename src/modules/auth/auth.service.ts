@@ -1,6 +1,6 @@
 // external imports
 import { InjectRedis } from '@nestjs-modules/ioredis';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import Redis from 'ioredis';
 
@@ -16,6 +16,8 @@ import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateChurchDto } from './dto/create-church.dto';
+import { verifyPassword } from 'src/common/utils/password.util';
+import { ChurchStatus } from 'prisma/generated';
 
 @Injectable()
 export class AuthService {
@@ -26,7 +28,7 @@ export class AuthService {
     private userRepository: UserRepository,
     private ucodeRepository: UcodeRepository,
     @InjectRedis() private readonly redis: Redis,
-  ) { }
+  ) {}
 
   //
   async me(userId: string) {
@@ -179,7 +181,6 @@ export class AuthService {
 
       const payload = { email: email, sub: userId, type: user?.type };
 
-
       const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
       const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
@@ -209,7 +210,7 @@ export class AuthService {
     }
   }
 
-  // update user 
+  // update user
   async updateUser(
     userId: string,
     updateUserDto: UpdateUserDto,
@@ -247,7 +248,7 @@ export class AuthService {
 
         data.avatar = fileName;
       }
-      
+
       const user = await this.userRepository.getUserDetails(userId);
       if (user) {
         await this.prisma.user.update({
@@ -563,11 +564,11 @@ export class AuthService {
     }
   }
 
-
   /*=====================================================
                       Church Section  Start
   =====================================================*/
-          
+
+  // add new church
   async createChurch(
     church_name: string,
     church_city: string,
@@ -578,9 +579,7 @@ export class AuthService {
     status?: string,
     auth_type?: string,
   ) {
-
     try {
-
       // Check if church email already exist
       const churchEmailExist = await this.prisma.church.findFirst({
         where: {
@@ -631,17 +630,76 @@ export class AuthService {
         success: true,
         message: 'Church created successfully',
       };
-
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.message,
-    };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
   }
 
+  //  login church
+  async churchLogin( 
+    church_email: string, 
+    church_password: string  
+  ) {
+    try {
+      
+   const church = await this.prisma.church.findFirst({
+    where: {
+      church_email: church_email,
+      deleted_at: null,
+    },
+  });
 
+  if (!church) {
+    throw new BadRequestException('Invalid church email or password');
+  }
+  
+  // Validate password
+   const isPasswordMatched = await verifyPassword(church_password, church.church_password);
 
-  } 
+     if (church.status !== ChurchStatus.ACTIVE) {
+      throw new BadRequestException('Church account is not active');
+    }
+    
+     // jwt payload
+    const payload = {
+      sub: church.id,
+      church_id: church.id,
+      church_email: church.church_email,
+      auth_type: church.auth_type,
+      type: 'CHURCH',
+    };
+
+      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+      // store refreshToken
+      await this.redis.set(
+        `refresh_token:church:${church.id}`,
+        refreshToken,
+        'EX',
+        60 * 60 * 24 * 7, // 7 days in seconds
+      );
+
+      return {
+        success: true,
+        message: 'Logged in successfully',
+        authorization: {
+          type: 'bearer',
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        },
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+   }
+
   
 
 

@@ -8,7 +8,7 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { UserType } from 'prisma/generated';
+import { UserType } from 'prisma/generated/enums';
 
 export class CreateUserDto {
  

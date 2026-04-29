@@ -15,9 +15,8 @@ import appConfig from '../../config/app.config';
 import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { CreateChurchDto } from './dto/create-church.dto';
 import { verifyPassword } from 'src/common/utils/password.util';
-import { ChurchStatus } from 'prisma/generated';
+import { ChurchStatus } from 'prisma/generated/enums';
 
 @Injectable()
 export class AuthService {

@@ -3,7 +3,6 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 import { UserRepository } from './user/user.repository';
 import { ChatRepository } from './chat/chat.repository';
 import { NotificationRepository } from './notification/notification.repository';
-import { TransactionRepository } from './transaction/transaction.repository';
 import { UcodeRepository } from './ucode/ucode.repository';
 
 @Global()
@@ -13,14 +12,12 @@ import { UcodeRepository } from './ucode/ucode.repository';
     UserRepository,
     ChatRepository,
     NotificationRepository,
-    TransactionRepository,
     UcodeRepository,
   ],
   exports: [
     UserRepository,
     ChatRepository,
     NotificationRepository,
-    TransactionRepository,
     UcodeRepository,
   ],
 })

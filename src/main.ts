@@ -2,7 +2,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { join } from 'path';
 // internal imports
@@ -12,23 +12,54 @@ import { CustomExceptionFilter } from './common/exception/custom-exception.filte
 import { TanvirStorage } from './common/lib/Disk/TanvirStorage';
 import appConfig from './config/app.config';
 import { PrismaExceptionFilter } from './common/exception/prisma-exception.filter';
+import {
+  buildSwaggerOptions,
+  swaggerUiOptions,
+} from './common/swagger/swagger-auth';
+import { NextFunction, Request, Response } from 'express';
 
 async function bootstrap() {
- 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
 
- 
   app.useWebSocketAdapter(new IoAdapter(app));
   app.setGlobalPrefix('api');
-  app.enableCors();
-  app.use(helmet());
- 
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' }, // ← add this
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: [`'self'`],
+          connectSrc: [`'self'`, `https:`, `http:`],
+          scriptSrc: [`'self'`, `'unsafe-inline'`, `'unsafe-eval'`],
+          styleSrc: [`'self'`, `'unsafe-inline'`],
+          imgSrc: [`'self'`, `data:`, `https:`, `http:`], // ← also add http: here
+          workerSrc: [`'self'`, `blob:`],
+          frameSrc: [`'self'`],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
-  app.useStaticAssets(join(__dirname, "..", "..", "public"), {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const url = req.originalUrl || req.url;
+
+    if (url.includes('/.well-known/') || url.includes('com.chrome.devtools')) {
+      return res.status(204).end();
+    }
+
+    next();
+  });
+
+  app.useStaticAssets(join(__dirname, '..', '..', 'public'), {
     index: false,
-    prefix: "/public",
+    prefix: '/public',
   });
 
   app.useGlobalPipes(
@@ -41,10 +72,10 @@ async function bootstrap() {
       },
     }),
   );
-  
+
   app.useGlobalFilters(
     new CustomExceptionFilter(),
-    new PrismaExceptionFilter(),  
+    new PrismaExceptionFilter(),
   );
 
   // storage setup
@@ -63,16 +94,9 @@ async function bootstrap() {
   });
 
   // swagger
-  const options = new DocumentBuilder()
-    .setTitle(`${process.env.APP_NAME} api`)
-    .setDescription(`${process.env.APP_NAME} api docs`)
-    .setVersion('1.0')
-    .addTag(`${process.env.APP_NAME}`)
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, options);
-  SwaggerModule.setup('api/docs', app, document);
- 
+  const document = SwaggerModule.createDocument(app, buildSwaggerOptions());
+
+  SwaggerModule.setup('api/docs', app, document, swaggerUiOptions);
 
   await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
 }

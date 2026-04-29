@@ -116,9 +116,21 @@ export class LoggerMiddleware implements NestMiddleware {
   // ─── Skip config ────────────────────────────────────────────────────────────
   private readonly skipPrefixes = ['/api/docs', '/public', '/storage'];
   private readonly skipExact = new Set(['/health', '/favicon.ico']);
+  private readonly skipContains = [
+    '/.well-known/', // Skip all well-known requests
+    'com.chrome.devtools.json', // Skip Chrome DevTools requests
+  ];
 
   private shouldSkip(path: string): boolean {
+    // Skip exact matches
     if (this.skipExact.has(path)) return true;
+
+    // Skip paths that contain specific strings
+    if (this.skipContains.some((pattern) => path.includes(pattern))) {
+      return true;
+    }
+
+    // Skip paths with specific prefixes
     return this.skipPrefixes.some((prefix) => path.startsWith(prefix));
   }
 
@@ -250,7 +262,9 @@ export class LoggerMiddleware implements NestMiddleware {
 
   // ─── Main middleware ──────────────────────────────────────────────────────
   use(req: Request & { user?: any }, res: Response, next: NextFunction): void {
-    if (this.shouldSkip(req.path)) {
+    const url = req.originalUrl || req.url;
+
+    if (this.shouldSkip(url)) {
       return next();
     }
 

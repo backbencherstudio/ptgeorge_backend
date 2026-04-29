@@ -31,6 +31,7 @@ model Account {
 }
 
 enum UserType {
+  SUPER_ADMIN
   ADMIN
   CHURCH_ADMIN
   USER
@@ -113,11 +114,8 @@ model User {
   sentNotifications     Notification[] @relation("notificationSender")
 
   // --- Other Relation --- 
-
-  user_payment_methods UserPaymentMethod[]
   ucodes               Ucode[]
   role_users           RoleUser[]
-  payment_transactions PaymentTransaction[]
 
   @@map("users")
 }
@@ -349,103 +347,3 @@ model RoleUser {
   @@id([role_id, user_id])
   @@map("role_users")
 }
-
-/**
- * ---------------------------------------------------------------------
- * Role and Permission Schema end
- * ---------------------------------------------------------------------
- */
-
-/**
- * ---------------------------------------------------------------------
- * Payment Schema start
- * ---------------------------------------------------------------------
- */
-
-model UserPaymentMethod {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
-  deleted_at DateTime?
-
-  user_id String?
-  user    User?   @relation(fields: [user_id], references: [id])
-
-  payment_method_id String?
-  checkout_id       String?
-
-  @@map("user_payment_methods")
-}
-
-model PaymentTransaction {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
-  deleted_at DateTime?
-
-  store_id String?
-
-  user_id String?
-  user    User?   @relation(fields: [user_id], references: [id])
-
-  order_id         String?
-  type             String?  @default("order")
-  withdraw_via     String?  @default("wallet")
-  provider         String?
-  reference_number String?
-  status           String?  @default("pending")
-  raw_status       String?
-  amount           Decimal?
-  currency         String?
-  paid_amount      Decimal?
-  paid_currency    String?
-
-  @@map("payment_transactions")
-}
-
-/**
- * ---------------------------------------------------------------------
- * Payment Schema end
- * ---------------------------------------------------------------------
- */
-
-/**
- * ---------------------------------------------------------------------
- * others Schema start
- * ---------------------------------------------------------------------
- */
-
-model Faq {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
-  deleted_at DateTime?
-
-  status     Int?    @default(1) @db.SmallInt
-  sort_order Int?    @default(0)
-  question   String?
-  answer     String?
-
-  @@map("faqs")
-}
-
-model Contact {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
-  deleted_at DateTime?
-
-  first_name   String?
-  last_name    String?
-  email        String?
-  phone_number String?
-  message      String?
-
-  @@map("contacts")
-}
-
-/**
- * ---------------------------------------------------------------------
- * others Schema end
- * ---------------------------------------------------------------------
- */

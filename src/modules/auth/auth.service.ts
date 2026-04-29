@@ -1,6 +1,10 @@
 // external imports
 import { InjectRedis } from '@nestjs-modules/ioredis';
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import Redis from 'ioredis';
 
@@ -130,22 +134,22 @@ export class AuthService {
       }
 
       // create stripe customer account
-      const stripeCustomer = await StripePayment.createCustomer({
-        user_id: user.data.id,
-        email: email,
-        name: `${first_name} ${last_name}`,
-      });
+      // const stripeCustomer = await StripePayment.createCustomer({
+      //   user_id: user.data.id,
+      //   email: email,
+      //   name: `${first_name} ${last_name}`,
+      // });
 
-      if (stripeCustomer) {
-        await this.prisma.user.update({
-          where: {
-            id: user.data.id,
-          },
-          data: {
-            billing_id: stripeCustomer.id,
-          },
-        });
-      }
+      // if (stripeCustomer) {
+      //   await this.prisma.user.update({
+      //     where: {
+      //       id: user.data.id,
+      //     },
+      //     data: {
+      //       billing_id: stripeCustomer.id,
+      //     },
+      //   });
+      // }
 
       // ----------------------------------------------------
       // create otp code
@@ -638,38 +642,37 @@ export class AuthService {
   }
 
   //  login church
-  async churchLogin( 
-    church_email: string, 
-    church_password: string  
-  ) {
+  async churchLogin(church_email: string, church_password: string) {
     try {
-      
-   const church = await this.prisma.church.findFirst({
-    where: {
-      church_email: church_email,
-      deleted_at: null,
-    },
-  });
+      const church = await this.prisma.church.findFirst({
+        where: {
+          church_email: church_email,
+          deleted_at: null,
+        },
+      });
 
-  if (!church) {
-    throw new BadRequestException('Invalid church email or password');
-  }
-  
-  // Validate password
-   const isPasswordMatched = await verifyPassword(church_password, church.church_password);
+      if (!church) {
+        throw new BadRequestException('Invalid church email or password');
+      }
 
-     if (church.status !== ChurchStatus.ACTIVE) {
-      throw new BadRequestException('Church account is not active');
-    }
-    
-     // jwt payload
-    const payload = {
-      sub: church.id,
-      church_id: church.id,
-      church_email: church.church_email,
-      auth_type: church.auth_type,
-      type: 'CHURCH',
-    };
+      // Validate password
+      const isPasswordMatched = await verifyPassword(
+        church_password,
+        church.church_password,
+      );
+
+      if (church.status !== ChurchStatus.ACTIVE) {
+        throw new BadRequestException('Church account is not active');
+      }
+
+      // jwt payload
+      const payload = {
+        sub: church.id,
+        church_id: church.id,
+        church_email: church.church_email,
+        auth_type: church.auth_type,
+        type: 'CHURCH',
+      };
 
       const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
       const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
@@ -697,10 +700,7 @@ export class AuthService {
         message: error.message,
       };
     }
-   }
-
-  
-
+  }
 
   // ---------------------------------(end)---------------------------------------
 

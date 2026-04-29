@@ -14,16 +14,15 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { memoryStorage } from 'multer';
 import { LocalAuthGuard } from 'src/modules/auth/guards/local-auth.guard';
 import { AuthService } from './auth.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, LoginDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { first } from 'rxjs';
 import { CreateChurchDto } from './dto/create-church.dto';
 import { ChurchLoginDto } from './dto/login-church.dto';
 
@@ -52,63 +51,57 @@ export class AuthController {
 
   // *register user
   @Post('register')
+  @ApiOperation({
+    summary: 'Register a new user',
+    description: `Creates a new standard USER account.
+
+Validation Rules:
+- Email must be unique and valid format
+- Password must be at least 8 characters
+- Phone number must be unique
+- All required fields must be provided`,
+  })
+  @ApiBody({
+    type: CreateUserDto,
+    description: 'User registration data',
+    examples: {
+      user: {
+        summary: 'User Registration',
+        value: {
+          first_name: 'John',
+          last_name: 'Doe',
+          phone_number: '+880123456789',
+          church_name: 'Grace Community Church',
+          language: 'en',
+          email: 'john@example.com',
+          password: 'password123',
+        },
+      },
+    },
+  })
   async create(@Body() data: CreateUserDto) {
     try {
-     
-      const first_name = data.first_name;
-      const last_name = data.last_name;
-      const phone_number = data.phone_number;
-      const church_name = data.church_name;
-      const language = data.language;
-
-      const email = data.email;
-      const password = data.password;
-      const type = data.type;
-
-
-
-      if (!first_name) {
-        throw new HttpException('First name not provided', HttpStatus.UNAUTHORIZED);
-      }
-
-      if (!last_name) {
-        throw new HttpException('Last name not provided', HttpStatus.UNAUTHORIZED);
-      }
-
-      if (!phone_number) {
-        throw new HttpException('Phone number not provided', HttpStatus.UNAUTHORIZED);
-      }
-      
-      if (!church_name) {
-        throw new HttpException('Church name not provided', HttpStatus.UNAUTHORIZED);
-      }
-
-      if (!language) {
-        throw new HttpException('Language not provided', HttpStatus.UNAUTHORIZED);
-      }
-
-      if (!email) {
-        throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
-      }
-      
-      if (!password) {
-        throw new HttpException('Password not provided', HttpStatus.UNAUTHORIZED);
-      }
-     
-
       const response = await this.authService.register({
-        first_name: first_name,
-        last_name: last_name,
-        phone_number: phone_number,
-        church_name: church_name,
-        language: language,
-        email: email,
-        password: password,
-        type: type,
+        first_name: data.first_name,
+        last_name: data.last_name,
+        phone_number: data.phone_number,
+        church_name: data.church_name,
+        language: data.language,
+        email: data.email,
+        password: data.password,
+        type: data.type,
       });
 
       return response;
     } catch (error: any) {
+      // Handle specific error types
+      if (error.code === 'P2002') {
+        return {
+          success: false,
+          message: 'Email already registered',
+        };
+      }
+
       return {
         success: false,
         message: error.message,
@@ -116,33 +109,30 @@ export class AuthController {
     }
   }
 
-  // *login user
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  async login(@Req() req: Request, @Res() res: Response) {
-    try {
-      const user_id = req.user.id;
-      const user_email = req.user.email;
+  @ApiOperation({ summary: 'Login user' })
+  @ApiBody({ type: LoginDto })
+  async login(
+    @Req() req: Request & { user: any },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const user_id = req.user.id;
+    const user_email = req.user.email;
 
-      const response = await this.authService.login({
-        userId: user_id,
-        email: user_email,
-      });
+    const response = await this.authService.login({
+      userId: user_id,
+      email: user_email,
+    });
 
-      // store to secure cookies
-      res.cookie('refresh_token', response.authorization.refresh_token, {
-        httpOnly: true,
-        secure: true,
-        maxAge: 1000 * 60 * 60 * 24 * 7, 
-      });
-      res.json(response);
-    } 
-    catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+    res.cookie('refresh_token', response.authorization.refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    });
+
+    return response;
   }
 
   // *update user
@@ -151,7 +141,7 @@ export class AuthController {
   @UseInterceptors(
     FileInterceptor('image', {
       storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 }, 
+      limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
   async updateUser(
@@ -354,7 +344,6 @@ export class AuthController {
     }
   }
 
-
   /*=====================================================
                       Church Section  Start
   =====================================================*/
@@ -362,9 +351,7 @@ export class AuthController {
   // add new church
   @Post('church/register')
   async createChurch(@Body() dto: CreateChurchDto) {
-    
     try {
-
       const church_name = dto.church_name;
       const church_city = dto.church_city;
       const church_email = dto.church_email;
@@ -375,25 +362,40 @@ export class AuthController {
       const auth_type = dto.auth_type;
 
       if (!church_name) {
-        throw new HttpException('Church name not provided', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'Church name not provided',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
 
       if (!church_city) {
-        throw new HttpException('Church city not provided', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'Church city not provided',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
-      
+
       if (!church_email) {
-        throw new HttpException('Church email not provided', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'Church email not provided',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
 
       if (!church_domain) {
-        throw new HttpException('Church domain not provided', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'Church domain not provided',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
-      
+
       if (!church_password) {
-        throw new HttpException('Church password not provided', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'Church password not provided',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
-      
+
       const response = await this.authService.createChurch(
         church_name,
         church_city,
@@ -412,31 +414,32 @@ export class AuthController {
         message: error.message,
       };
     }
-
   }
-  
 
   // church auth
-  @Post('church/login') 
-  async churchLogin(
-    @Body() dto: ChurchLoginDto,
-
-  ) {
+  @Post('church/login')
+  async churchLogin(@Body() dto: ChurchLoginDto) {
     try {
       const church_email = dto.church_email;
       const church_password = dto.church_password;
 
       if (!church_email) {
-        throw new HttpException('Church email not provided', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'Church email not provided',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
-      
+
       if (!church_password) {
-        throw new HttpException('Church password not provided', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'Church password not provided',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
 
       const response = await this.authService.churchLogin(
-        church_email, 
-        church_password
+        church_email,
+        church_password,
       );
       return response;
     } catch (error: any) {
@@ -446,8 +449,6 @@ export class AuthController {
       };
     }
   }
-
-
 
   //-----------------------------------------------(end)----------------------------------------------------------------------
 
@@ -506,134 +507,4 @@ export class AuthController {
       data: req.user,
     };
   }
-
- 
-
-  // --------------change password---------
-
-  // --------------end change password---------
-
-  // -------change email address------
-  @ApiOperation({ summary: 'request email change' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Post('request-email-change')
-  async requestEmailChange(
-    @Req() req: Request,
-    @Body() data: { email: string },
-  ) {
-    try {
-      const user_id = req.user.userId;
-      const email = data.email;
-      if (!email) {
-        throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
-      }
-      return await this.authService.requestEmailChange(user_id, email);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: 'Something went wrong',
-      };
-    }
-  }
-
-  @ApiOperation({ summary: 'Change email address' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Post('change-email')
-  async changeEmail(
-    @Req() req: Request,
-    @Body() data: { email: string; token: string },
-  ) {
-    try {
-      const user_id = req.user.userId;
-      const email = data.email;
-
-      const token = data.token;
-      if (!email) {
-        throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
-      }
-      if (!token) {
-        throw new HttpException('Token not provided', HttpStatus.UNAUTHORIZED);
-      }
-      return await this.authService.changeEmail({
-        user_id: user_id,
-        new_email: email,
-        token: token,
-      });
-    } catch (error: any) {
-      return {
-        success: false,
-        message: 'Something went wrong',
-      };
-    }
-  }
-  // -------end change email address------
-
-  // --------- 2FA ---------
-  @ApiOperation({ summary: 'Generate 2FA secret' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Post('generate-2fa-secret')
-  async generate2FASecret(@Req() req: Request) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.generate2FASecret(user_id);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiOperation({ summary: 'Verify 2FA' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Post('verify-2fa')
-  async verify2FA(@Req() req: Request, @Body() data: { token: string }) {
-    try {
-      const user_id = req.user.userId;
-      const token = data.token;
-      return await this.authService.verify2FA(user_id, token);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiOperation({ summary: 'Enable 2FA' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Post('enable-2fa')
-  async enable2FA(@Req() req: Request) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.enable2FA(user_id);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiOperation({ summary: 'Disable 2FA' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Post('disable-2fa')
-  async disable2FA(@Req() req: Request) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.disable2FA(user_id);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-  // --------- end 2FA ---------
 }

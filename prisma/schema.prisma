@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Account {
@@ -146,19 +145,39 @@ model Ucode {
  * ---------------------------------------------------------------------
  */
 
+enum ChurchAuthType {
+  SYSTEM_ADMIN
+  EDITOR
+  HELPER
+  CHURCH_ADMIN
+}
+
+enum ChurchStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+
 model Church {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  church_name String? @db.VarChar(255)
-  church_city String? @db.VarChar(255)
-  church_email String? @db.VarChar(255)
-  church_domain String? @db.VarChar(255)
-  church_password String? @db.VarChar(255)
-  church_adminname String? @db.VarChar(255)
+  church_name String @db.VarChar(255)
+  church_city String @db.VarChar(255)
+  church_email String @db.VarChar(255)
+  church_domain String @db.VarChar(255)
+  church_password String @db.VarChar(255)
+  church_adminname String @db.VarChar(255)
 
+  status ChurchStatus @default(PENDING)  
+
+  auth_type ChurchAuthType @default(CHURCH_ADMIN)
+
+  @@map("churches") 
 
 }
  

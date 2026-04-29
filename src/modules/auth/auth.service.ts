@@ -15,6 +15,7 @@ import appConfig from '../../config/app.config';
 import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateChurchDto } from './dto/create-church.dto';
 
 @Injectable()
 export class AuthService {
@@ -561,6 +562,88 @@ export class AuthService {
       };
     }
   }
+
+
+  /*=====================================================
+                      Church Section  Start
+  =====================================================*/
+          
+  async createChurch(
+    church_name: string,
+    church_city: string,
+    church_email: string,
+    church_domain: string,
+    church_password: string,
+    church_adminname?: string,
+    status?: string,
+    auth_type?: string,
+  ) {
+
+    try {
+
+      // Check if church email already exist
+      const churchEmailExist = await this.prisma.church.findFirst({
+        where: {
+          church_email: church_email,
+        },
+      });
+
+      if (churchEmailExist) {
+        return {
+          success: false,
+          message: 'Church email already exist',
+        };
+      }
+
+      // church_name must be unique
+      const churchNameExist = await this.prisma.church.findFirst({
+        where: {
+          church_name: church_name,
+        },
+      });
+
+      if (churchNameExist) {
+        return {
+          success: false,
+          message: 'Church name already exist',
+        };
+      }
+
+      const church = await this.userRepository.createChurch({
+        church_name,
+        church_city,
+        church_email,
+        church_domain,
+        church_password,
+        church_adminname,
+        status,
+        auth_type,
+      });
+
+      if (church == null && church.success == false) {
+        return {
+          success: false,
+          message: 'Failed to create church',
+        };
+      }
+
+      return {
+        success: true,
+        message: 'Church created successfully',
+      };
+
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message,
+    };
+  }
+
+
+
+  } 
+  
+
 
   // ---------------------------------(end)---------------------------------------
 

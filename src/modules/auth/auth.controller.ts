@@ -24,6 +24,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { first } from 'rxjs';
+import { CreateChurchDto } from './dto/create-church.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -354,10 +355,64 @@ export class AuthController {
 
 
   /*=====================================================
-                      Church Section
+                      Church Section  Start
   =====================================================*/
 
-   // add new church
+  // add new church
+  @Post('church/register')
+  async createChurch(@Body() dto: CreateChurchDto) {
+    
+    try {
+
+      const church_name = dto.church_name;
+      const church_city = dto.church_city;
+      const church_email = dto.church_email;
+      const church_domain = dto.church_domain;
+      const church_password = dto.church_password;
+      const church_adminname = dto.church_adminname;
+      const status = dto.status;
+      const auth_type = dto.auth_type;
+
+      if (!church_name) {
+        throw new HttpException('Church name not provided', HttpStatus.UNAUTHORIZED);
+      }
+
+      if (!church_city) {
+        throw new HttpException('Church city not provided', HttpStatus.UNAUTHORIZED);
+      }
+      
+      if (!church_email) {
+        throw new HttpException('Church email not provided', HttpStatus.UNAUTHORIZED);
+      }
+
+      if (!church_domain) {
+        throw new HttpException('Church domain not provided', HttpStatus.UNAUTHORIZED);
+      }
+      
+      if (!church_password) {
+        throw new HttpException('Church password not provided', HttpStatus.UNAUTHORIZED);
+      }
+      
+      const response = await this.authService.createChurch(
+        church_name,
+        church_city,
+        church_email,
+        church_domain,
+        church_password,
+        church_adminname,
+        status,
+        auth_type,
+      );
+
+      return response;
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+
+  }
   
 
 

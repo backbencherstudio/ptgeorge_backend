@@ -293,6 +293,87 @@ export class UserRepository {
     }
   }
 
+   
+  /**
+   * create a church with
+   */
+  async createChurch({
+  church_name,
+  church_city,
+  church_email,
+  church_domain,
+  church_password,
+  church_adminname,
+  status,
+  auth_type,
+}: {
+  church_name: string;
+  church_city: string;
+  church_email: string;
+  church_domain: string;
+  church_password: string;
+  church_adminname?: string;
+  status?: string;
+  auth_type?: string;
+  }) {
+
+    try {
+      
+      const data: any = {}
+
+      if (church_name) {
+        data['church_name'] = church_name;
+      }
+
+      if (church_city) {
+        data['church_city'] = church_city;
+      }
+      
+      if (church_email) {
+        data['church_email'] = church_email;
+      }
+
+      if (church_domain) {
+        data['church_domain'] = church_domain;
+      }
+
+      if (church_password) {
+        data['church_password'] = await bcrypt.hash(
+          church_password,
+          appConfig().security.salt
+        );
+      }
+
+      if (church_adminname) {
+        data['church_adminname'] = church_adminname;
+      }
+
+      if (status) {
+        data['status'] = status;
+      }
+
+      if (auth_type) {
+        data['auth_type'] = auth_type;
+      }
+
+      const church = await this.prisma.church.create({
+        data: data,
+      });
+
+       return {
+          success: true,
+          message: 'Church created successfully',
+          data: church,
+        };
+
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
   /**
    * create user under a tenant
    * @param param0

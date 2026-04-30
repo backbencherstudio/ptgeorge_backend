@@ -294,6 +294,9 @@ model Role {
   title  String?
   name   String?
 
+  description String?
+  color       String?
+  
   permission_roles PermissionRole[]
   role_users       RoleUser[]
   permissions      Permission[]     @relation("PermissionToRole")
@@ -307,12 +310,14 @@ model Permission {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  status     Int?    @default(1) @db.SmallInt
-  title      String?
-  action     String?
-  subject    String?
-  conditions String?
-  fields     String?
+  status  PermissionStatus @default(ACTIVE)   // ← changed from Int to enum
+  title   String?                              // "Manage Churches"
+  name    String?          @unique             // auto-generated key: "manage_church"
+  action  PermissionAction?                    // manage | read | create | update | delete
+  category String?                             // "Church" — UI grouping label
+  description String?      @db.Text            // human-readable description
+  conditions String?                           // reserved for future CASL row-level rules
+  fields     String?                           // reserved for future CASL field-level rules
 
   permission_roles PermissionRole[]
   roles            Role[]           @relation("PermissionToRole")
@@ -346,4 +351,17 @@ model RoleUser {
 
   @@id([role_id, user_id])
   @@map("role_users")
+}
+
+enum PermissionStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PermissionAction {
+  manage
+  read
+  create
+  update
+  delete
 }

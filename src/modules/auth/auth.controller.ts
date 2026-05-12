@@ -348,105 +348,37 @@ Validation Rules:
                       Church Section  Start
   =====================================================*/
 
-  // add new church
   @Post('church/register')
-  async createChurch(@Body() dto: CreateChurchDto) {
+  @ApiOperation({ summary: 'Register a new church' })
+  @ApiBody({ type: CreateChurchDto })
+  async createChurch(@Body() createChurchDto: CreateChurchDto) {
     try {
-      const church_name = dto.church_name;
-      const church_city = dto.church_city;
-      const church_email = dto.church_email;
-      const church_domain = dto.church_domain;
-      const church_password = dto.church_password;
-      const church_adminname = dto.church_adminname;
-      const status = dto.status;
-      const auth_type = dto.auth_type;
-
-      if (!church_name) {
-        throw new HttpException(
-          'Church name not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      if (!church_city) {
-        throw new HttpException(
-          'Church city not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      if (!church_email) {
-        throw new HttpException(
-          'Church email not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      if (!church_domain) {
-        throw new HttpException(
-          'Church domain not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      if (!church_password) {
-        throw new HttpException(
-          'Church password not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      const response = await this.authService.createChurch(
-        church_name,
-        church_city,
-        church_email,
-        church_domain,
-        church_password,
-        church_adminname,
-        status,
-        auth_type,
-      );
-
-      return response;
+      return await this.authService.createChurch(createChurchDto);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+        },
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
-  // church auth
   @Post('church/login')
-  async churchLogin(@Body() dto: ChurchLoginDto) {
+  @ApiOperation({ summary: 'Church login' })
+  @ApiBody({ type: ChurchLoginDto })
+  async churchLogin(@Body() churchLoginDto: ChurchLoginDto) {
     try {
-      const church_email = dto.church_email;
-      const church_password = dto.church_password;
-
-      if (!church_email) {
-        throw new HttpException(
-          'Church email not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      if (!church_password) {
-        throw new HttpException(
-          'Church password not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
-      const response = await this.authService.churchLogin(
-        church_email,
-        church_password,
-      );
-      return response;
+      return await this.authService.churchLogin(churchLoginDto);
     } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      throw new HttpException(
+        {
+          success: false,
+          message: error.message,
+        },
+        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 

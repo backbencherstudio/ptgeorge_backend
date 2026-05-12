@@ -2,6 +2,7 @@
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -21,6 +22,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { verifyPassword } from 'src/common/utils/password.util';
 import { ChurchStatus } from 'prisma/generated/enums';
+import { CreateChurchDto } from './dto/create-church.dto';
+import { ChurchLoginDto } from './dto/login-church.dto';
 
 @Injectable()
 export class AuthService {
@@ -571,135 +574,129 @@ export class AuthService {
                       Church Section  Start
   =====================================================*/
 
-  // add new church
-  async createChurch(
-    church_name: string,
-    church_city: string,
-    church_email: string,
-    church_domain: string,
-    church_password: string,
-    church_adminname?: string,
-    status?: string,
-    auth_type?: string,
-  ) {
-    try {
-      // Check if church email already exist
-      const churchEmailExist = await this.prisma.church.findFirst({
-        where: {
-          church_email: church_email,
-        },
-      });
+  async createChurch(createChurchDto: CreateChurchDto) {
+    const {
+      church_name,
+      church_city,
+      church_email,
+      church_domain,
+      church_password,
+      church_adminname,
+      status,
+      auth_type,
+    } = createChurchDto;
 
-      if (churchEmailExist) {
-        return {
-          success: false,
-          message: 'Church email already exist',
-        };
-      }
+    // Check if church email already exists
+    const churchEmailExist = await this.prisma.church.findFirst({
+      where: { church_email },
+    });
 
-      // church_name must be unique
-      const churchNameExist = await this.prisma.church.findFirst({
-        where: {
-          church_name: church_name,
-        },
-      });
-
-      if (churchNameExist) {
-        return {
-          success: false,
-          message: 'Church name already exist',
-        };
-      }
-
-      const church = await this.userRepository.createChurch({
-        church_name,
-        church_city,
-        church_email,
-        church_domain,
-        church_password,
-        church_adminname,
-        status,
-        auth_type,
-      });
-
-      if (church == null && church.success == false) {
-        return {
-          success: false,
-          message: 'Failed to create church',
-        };
-      }
-
-      return {
-        success: true,
-        message: 'Church created successfully',
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
+    if (churchEmailExist) {
+      throw new ConflictException('Church email already exists');
     }
+
+    // Check if church name already exists
+    const churchNameExist = await this.prisma.church.findFirst({
+      where: { church_name },
+    });
+
+    if (churchNameExist) {
+      throw new ConflictException('Church name already exists');
+    }
+
+    const church = await this.userRepository.createChurch({
+      church_name,
+      church_city,
+      church_email,
+      church_domain,
+      church_password,
+      church_adminname,
+      status,
+      auth_type,
+    });
+
+    if (!church || church.success === false) {
+      throw new BadRequestException('Failed to create church');
+    }
+
+    return {
+      success: true,
+      message: 'Church created successfully',
+      data: {
+        church_id: church.data.id,
+        church_name: church.data.church_name,
+        church_email: church.data.church_email,
+      },
+    };
   }
 
-  //  login church
-  async churchLogin(church_email: string, church_password: string) {
-    try {
-      const church = await this.prisma.church.findFirst({
-        where: {
-          church_email: church_email,
-          deleted_at: null,
-        },
-      });
+  async churchLogin(churchLoginDto: ChurchLoginDto) {
+    const { church_email, church_password } = churchLoginDto;
 
-      if (!church) {
-        throw new BadRequestException('Invalid church email or password');
-      }
+    const church = await this.prisma.church.findFirst({
+      where: {
+        church_email: church_email,
+        deleted_at: null,
+      },
+    });
 
-      // Validate password
-      const isPasswordMatched = await verifyPassword(
-        church_password,
-        church.church_password,
-      );
-
-      if (church.status !== ChurchStatus.ACTIVE) {
-        throw new BadRequestException('Church account is not active');
-      }
-
-      // jwt payload
-      const payload = {
-        sub: church.id,
-        church_id: church.id,
-        church_email: church.church_email,
-        auth_type: church.auth_type,
-        type: 'CHURCH',
-      };
-
-      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-      // store refreshToken
-      await this.redis.set(
-        `refresh_token:church:${church.id}`,
-        refreshToken,
-        'EX',
-        60 * 60 * 24 * 7, // 7 days in seconds
-      );
-
-      return {
-        success: true,
-        message: 'Logged in successfully',
-        authorization: {
-          type: 'bearer',
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        },
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
+    if (!church) {
+      throw new UnauthorizedException('Invalid church email or password');
     }
+
+    // Validate password
+    const isPasswordMatched = await verifyPassword(
+      church_password,
+      church.church_password,
+    );
+
+    if (!isPasswordMatched) {
+      throw new UnauthorizedException('Invalid church email or password');
+    }
+
+    if (church.status !== ChurchStatus.ACTIVE) {
+      throw new BadRequestException('Church account is not active');
+    }
+
+    // JWT payload
+    const payload = {
+      sub: church.id,
+      church_id: church.id,
+      church_email: church.church_email,
+      auth_type: church.auth_type,
+      type: 'CHURCH',
+    };
+
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    // Store refresh token in Redis
+    await this.redis.set(
+      `refresh_token:church:${church.id}`,
+      refreshToken,
+      'EX',
+      60 * 60 * 24 * 7, // 7 days
+    );
+
+    return {
+      success: true,
+      message: 'Logged in successfully',
+      data: {
+        church: {
+          id: church.id,
+          name: church.church_name,
+          email: church.church_email,
+          city: church.church_city,
+          domain: church.church_domain,
+        },
+      },
+      authorization: {
+        type: 'Bearer',
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: 3600, // 1 hour in seconds
+      },
+    };
   }
 
   // ---------------------------------(end)---------------------------------------

@@ -234,29 +234,6 @@ export class LoggerMiddleware implements NestMiddleware {
       lines.push('  ' + meta.join(paint(c.dim, c.gray, '  ·  ')));
     }
 
-    // payload sections
-    const sections: [string, unknown][] = [
-      ['Params', fields.params],
-      ['Query', fields.query],
-      ['Body', fields.body],
-      ['Response', fields.response],
-    ];
-
-    for (const [label, data] of sections) {
-      if (data === null || data === undefined) continue;
-      if (
-        typeof data === 'object' &&
-        !Array.isArray(data) &&
-        Object.keys(data as object).length === 0
-      )
-        continue;
-      const rendered = inlinePayload(data);
-      if (rendered) {
-        lines.push(paint(c.dim, c.gray, `  ┌── ${label}`));
-        lines.push(rendered);
-      }
-    }
-
     return lines.join('\n');
   }
 

@@ -183,27 +183,8 @@ model Church {
   users     User[]
   roleUsers RoleUser[]
 
-  @@map("churches")
-}
+  @@map("churches") 
 
-model Announcement {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
-  deleted_at DateTime?
-
-  title        String
-  message      String             @db.Text
-  status       AnnouncementStatus @default(PUBLISHED)
-  published_at DateTime?
-
-  // Store who created it (superadmin email or ID)
-  created_by       String // No relation needed, just store the creator identifier
-  created_by_email String // Optional: store email for easier querying
-
-  @@index([status])
-  @@index([published_at])
-  @@map("announcements")
 }
 
 /**
@@ -339,14 +320,14 @@ model Permission {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  status      PermissionStatus  @default(ACTIVE) // ← changed from Int to enum
-  title       String? // "Manage Churches"
-  name        String?           @unique // auto-generated key: "manage_church"
-  action      PermissionAction? // manage | read | create | update | delete
-  category    String? // "Church" — UI grouping label
-  description String?           @db.Text // human-readable description
-  conditions  String? // reserved for future CASL row-level rules
-  fields      String? // reserved for future CASL field-level rules
+  status  PermissionStatus @default(ACTIVE)   // ← changed from Int to enum
+  title   String?                              // "Manage Churches"
+  name    String?          @unique             // auto-generated key: "manage_church"
+  action  PermissionAction?                    // manage | read | create | update | delete
+  category String?                             // "Church" — UI grouping label
+  description String?      @db.Text            // human-readable description
+  conditions String?                           // reserved for future CASL row-level rules
+  fields     String?                           // reserved for future CASL field-level rules
 
   permission_roles PermissionRole[]
   roles            Role[]           @relation("PermissionToRole")

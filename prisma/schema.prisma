@@ -394,6 +394,7 @@ enum PermissionAction {
   create
   update
   delete
+  assign
 }
 
 enum AnnouncementStatus {

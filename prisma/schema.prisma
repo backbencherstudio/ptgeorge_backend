@@ -113,9 +113,13 @@ model User {
   receivedNotifications Notification[] @relation("notificationReceiver")
   sentNotifications     Notification[] @relation("notificationSender")
 
+  church_id String?
+  church    Church? @relation(fields: [church_id], references: [id])
+
   // --- Other Relation --- 
-  ucodes     Ucode[]
-  role_users RoleUser[]
+  ucodes               Ucode[]
+  roles_assigned_to_me RoleUser[] @relation("UserRoles")
+  roles_i_assigned     RoleUser[] @relation("RoleAssignment")
 
   @@map("users")
 }
@@ -173,8 +177,11 @@ model Church {
   church_members Int? @default(0)
 
   status ChurchStatus @default(PENDING)
-
   auth_type ChurchAuthType @default(CHURCH_ADMIN)
+
+  // relations
+  users     User[]
+  roleUsers RoleUser[]
 
   @@map("churches") 
 
@@ -300,7 +307,9 @@ model Role {
 
   permission_roles PermissionRole[]
   role_users       RoleUser[]
-  permissions      Permission[]     @relation("PermissionToRole")
+  permissions      Permission[]         @relation("PermissionToRole")
+  from_role_rules  RoleAssignmentRule[] @relation("FromRole")
+  to_role_rules    RoleAssignmentRule[] @relation("ToRole")
 
   @@map("roles")
 }
@@ -348,10 +357,30 @@ model RoleUser {
   role    Role   @relation(fields: [role_id], references: [id], onDelete: Cascade)
 
   user_id String
-  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user    User   @relation("UserRoles", fields: [user_id], references: [id], onDelete: Cascade)
+
+  assigned_by_id String?
+  assigned_by    User?   @relation("RoleAssignment", fields: [assigned_by_id], references: [id])
+
+  churchId String?
+  church   Church? @relation(fields: [churchId], references: [id])
 
   @@id([role_id, user_id])
   @@map("role_users")
+}
+
+// who can assign which roles
+model RoleAssignmentRule {
+  id           String   @id @default(cuid())
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now())
+  from_role_id String
+  from_role    Role     @relation("FromRole", fields: [from_role_id], references: [id])
+  to_role_id   String
+  to_role      Role     @relation("ToRole", fields: [to_role_id], references: [id])
+
+  @@unique([from_role_id, to_role_id])
+  @@map("role_assignment_rules")
 }
 
 enum PermissionStatus {

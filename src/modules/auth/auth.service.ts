@@ -24,6 +24,8 @@ import { verifyPassword } from 'src/common/utils/password.util';
 import { ChurchStatus } from 'prisma/generated/enums';
 import { CreateChurchDto } from './dto/create-church.dto';
 import { ChurchLoginDto } from './dto/login-church.dto';
+import * as bcrypt from 'bcrypt';
+import { UnifiedLoginDto } from './dto/create-user.dto';
 
 @Injectable()
 export class AuthService {
@@ -181,39 +183,168 @@ export class AuthService {
     }
   }
   // done
-  async login({ email, userId }) {
-    try {
-      const user = await this.userRepository.getUserDetails(userId);
+  // In your auth.service.ts
+  async unifiedLogin(loginDto: UnifiedLoginDto) {
+    const { email, password, token } = loginDto;
 
-      const payload = { email: email, sub: userId, type: user?.type };
+    console.log(`[Login Attempt] Email: ${email}`);
 
-      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    // FIRST: Try to find as user (since we want user login for role assignment)
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        roles_assigned_to_me: {
+          include: { role: true },
+          where: { churchId: { not: null } },
+          take: 1,
+        },
+      },
+    });
 
-      // store refreshToken
-      await this.redis.set(
-        `refresh_token:${user.id}`,
-        refreshToken,
-        'EX',
-        60 * 60 * 24 * 7, // 7 days in seconds
+    // If user exists, try user login first
+    if (user) {
+      console.log(`[User Found] Attempting user login...`);
+
+      // Check password
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (isPasswordValid) {
+        // Check email verification
+        if (!user.email_verified_at) {
+          throw new UnauthorizedException('Please verify your email first');
+        }
+
+        // Check if user is active
+        if (user.status !== 1) {
+          throw new UnauthorizedException('Your account is inactive');
+        }
+
+        // Check 2FA if enabled
+        if (user.is_two_factor_enabled === 1) {
+          if (!token) {
+            throw new UnauthorizedException('2FA token required');
+          }
+        }
+
+        const currentRole = user.roles_assigned_to_me[0]?.role;
+
+        console.log(
+          `[User Login Success] ${user.email} as ${currentRole?.title || user.type}`,
+        );
+
+        const payload = {
+          sub: user.id,
+          email: user.email,
+          userId: user.id,
+          type: user.type,
+          role: currentRole?.name || user.type.toLowerCase(),
+          church_id: user.church_id,
+        };
+
+        const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+        await this.redis.set(
+          `refresh_token:${user.id}`,
+          refreshToken,
+          'EX',
+          60 * 60 * 24 * 7,
+        );
+
+        return {
+          success: true,
+          message: 'Logged in successfully',
+          data: {
+            type: user.type,
+            role: currentRole?.title || user.type,
+            role_name: currentRole?.name || user.type.toLowerCase(),
+            user: {
+              id: user.id,
+              first_name: user.first_name,
+              last_name: user.last_name,
+              email: user.email,
+              church_id: user.church_id,
+            },
+          },
+          authorization: {
+            type: 'Bearer',
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            expires_in: 3600,
+          },
+        };
+      } else {
+        console.log(`[User Login] Password invalid for: ${email}`);
+      }
+    }
+
+    // If user login fails, try church login
+    const church = await this.prisma.church.findFirst({
+      where: {
+        OR: [{ church_email: email }, { church_domain: email }],
+        deleted_at: null,
+      },
+    });
+
+    if (church) {
+      console.log(`[Church Found] Attempting church login...`);
+
+      // Church login flow
+      const isPasswordMatched = await verifyPassword(
+        password,
+        church.church_password,
       );
 
-      return {
-        success: true,
-        message: 'Logged in successfully',
-        authorization: {
-          type: 'bearer',
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        },
-        type: user.type,
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      if (isPasswordMatched) {
+        if (church.status !== 'ACTIVE') {
+          throw new BadRequestException('Church account is not active');
+        }
+
+        const payload = {
+          sub: church.id,
+          church_id: church.id,
+          church_email: church.church_email,
+          auth_type: church.auth_type,
+          type: 'CHURCH',
+        };
+
+        const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+        await this.redis.set(
+          `refresh_token:church:${church.id}`,
+          refreshToken,
+          'EX',
+          60 * 60 * 24 * 7,
+        );
+
+        console.log(`[Church Login Success] ${church.church_email}`);
+
+        return {
+          success: true,
+          message: 'Church logged in successfully',
+          data: {
+            type: 'CHURCH',
+            church: {
+              id: church.id,
+              name: church.church_name,
+              email: church.church_email,
+              city: church.church_city,
+              domain: church.church_domain,
+            },
+          },
+          authorization: {
+            type: 'Bearer',
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            expires_in: 3600,
+          },
+        };
+      }
     }
+
+    // If neither works, throw error
+    console.log(`[Login Failed] No valid credentials for: ${email}`);
+    throw new UnauthorizedException('Invalid email or password');
   }
 
   // update user
@@ -626,75 +757,6 @@ export class AuthService {
         church_id: church.data.id,
         church_name: church.data.church_name,
         church_email: church.data.church_email,
-      },
-    };
-  }
-
-  async churchLogin(churchLoginDto: ChurchLoginDto) {
-    const { church_email, church_password } = churchLoginDto;
-
-    const church = await this.prisma.church.findFirst({
-      where: {
-        church_email: church_email,
-        deleted_at: null,
-      },
-    });
-
-    if (!church) {
-      throw new UnauthorizedException('Invalid church email or password');
-    }
-
-    // Validate password
-    const isPasswordMatched = await verifyPassword(
-      church_password,
-      church.church_password,
-    );
-
-    if (!isPasswordMatched) {
-      throw new UnauthorizedException('Invalid church email or password');
-    }
-
-    if (church.status !== ChurchStatus.ACTIVE) {
-      throw new BadRequestException('Church account is not active');
-    }
-
-    // JWT payload
-    const payload = {
-      sub: church.id,
-      church_id: church.id,
-      church_email: church.church_email,
-      auth_type: church.auth_type,
-      type: 'CHURCH',
-    };
-
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-    // Store refresh token in Redis
-    await this.redis.set(
-      `refresh_token:church:${church.id}`,
-      refreshToken,
-      'EX',
-      60 * 60 * 24 * 7, // 7 days
-    );
-
-    return {
-      success: true,
-      message: 'Logged in successfully',
-      data: {
-        church: {
-          id: church.id,
-          name: church.church_name,
-          email: church.church_email,
-          city: church.church_city,
-          domain: church.church_domain,
-        },
-      },
-      authorization: {
-        type: 'Bearer',
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        expires_in: 3600, // 1 hour in seconds
       },
     };
   }

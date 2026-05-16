@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Patch,
@@ -14,17 +15,29 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { memoryStorage } from 'multer';
 import { LocalAuthGuard } from 'src/modules/auth/guards/local-auth.guard';
 import { AuthService } from './auth.service';
-import { CreateUserDto, LoginDto } from './dto/create-user.dto';
+import {
+  CreateUserDto,
+  LoginDto,
+  UnifiedLoginDto,
+} from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CreateChurchDto } from './dto/create-church.dto';
 import { ChurchLoginDto } from './dto/login-church.dto';
+import appConfig from 'src/config/app.config';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -152,87 +165,187 @@ Validation Rules:
   }
 
   // User login endpoint
-  @UseGuards(LocalAuthGuard)
   @Post('login')
-  @ApiConsumes('application/json')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Login user',
-    description: `Authenticate user with email and password. Returns JWT tokens.
+    summary: 'Unified Login - User or Church Authentication',
+    description: `Authenticate as either a church administrator or regular user. The system automatically detects whether the email belongs to a church or a user.
 
-Requirements:
-- Email must be verified (email_verified_at must be set)
-- Password must match and be correct
-- If 2FA is enabled, token parameter is required
+**⚠️ IMPORTANT: Two Different Logins with Same Email:**
 
-Note: Refresh token is also set as httpOnly secure cookie`,
+The email \`admin@gracechurch.org\` exists in BOTH tables with DIFFERENT passwords:
+
+| Login Type | Password | What you can do |
+|------------|----------|-----------------|
+| **USER Login** (Person) | \`Password@123\` | Assign roles, manage users, church operations |
+| **CHURCH Login** (Organization) | \`Church@2024\` | Church settings, domain management |
+
+**Authentication Flow:**
+1. System first checks if email exists in churches table
+2. If found, authenticates as CHURCH entity using church_password
+3. If not found or church login fails, checks users table
+4. Authenticates as USER entity using user's password
+5. Returns JWT tokens for authorized access
+
+**For Role Assignment (church_main_admin):** Use USER login with \`Password@123\``,
   })
   @ApiBody({
-    type: LoginDto,
-    description: 'User login credentials',
+    type: UnifiedLoginDto,
+    description: 'Login credentials - email and password',
     examples: {
-      basic: {
-        summary: 'Basic Login',
-        description: 'Login with email and password',
+      // ───────────────── USER LOGIN (PERSON) FOR ROLE ASSIGNMENT ─────────────────
+      user_login_church_main_admin: {
+        summary:
+          '👤 USER LOGIN - Church Main Admin (Recommended for Role Assignment)',
+        description:
+          'Login as JOHN SMITH (person) who has church_main_admin role. Use this for role assignment APIs.',
         value: {
-          email: 'john@example.com',
-          password: 'password123',
+          email: 'admin@gracechurch.org',
+          password: 'Password@123', // ← User's password
         },
       },
-      with2FA: {
-        summary: 'Login with 2FA',
-        description: 'Login with email, password and 2FA token',
+      user_login_pastor: {
+        summary: '👤 USER LOGIN - Pastor',
+        description: 'Login as Father Michael Anderson with pastor role.',
         value: {
-          email: 'john@example.com',
+          email: 'pastor@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      user_login_assistant_pastor: {
+        summary: '👤 USER LOGIN - Assistant Pastor',
+        description: 'Login as Rev. Sarah Johnson with assistant pastor role.',
+        value: {
+          email: 'assistant-pastor@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      user_login_church_leader: {
+        summary: '👤 USER LOGIN - Church Leader',
+        description: 'Login as Michael Chen with church leader role.',
+        value: {
+          email: 'leader@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      user_login_background_checker: {
+        summary: '👤 USER LOGIN - Background Checker',
+        description: 'Login as Robert Wilson with background checker role.',
+        value: {
+          email: 'checker@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      user_login_helper: {
+        summary: '👤 USER LOGIN - Helper',
+        description: 'Login as David Kim with helper role.',
+        value: {
+          email: 'helper@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      user_login_member: {
+        summary: '👤 USER LOGIN - Church Member',
+        description: 'Login as Emily Rodriguez as church member.',
+        value: {
+          email: 'member@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      user_login_verified_pro: {
+        summary: '👤 USER LOGIN - Verified Professional',
+        description: 'Login as James Wilson as verified professional.',
+        value: {
+          email: 'pro@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+
+      // ───────────────── CHURCH ORGANIZATION LOGIN ─────────────────
+      church_login: {
+        summary: '🏛️ CHURCH LOGIN - Grace Church (Organization)',
+        description:
+          'Login as the CHURCH ORGANIZATION itself. Use this for church-level settings, NOT for role assignment.',
+        value: {
+          email: 'admin@gracechurch.org',
+          password: 'Church@2024', // ← Church's password
+        },
+      },
+
+      // ───────────────── FAITH ASSEMBLY CHURCH USERS ─────────────────
+      faith_user_login_main_admin: {
+        summary: '👤 USER LOGIN - Faith Church Main Admin',
+        description:
+          'Login as Michael Johnson with church_main_admin role at Faith Assembly.',
+        value: {
+          email: 'admin@faithassembly.org',
+          password: 'Password@123',
+        },
+      },
+      faith_user_login_pastor: {
+        summary: '👤 USER LOGIN - Faith Church Pastor',
+        description: 'Login as Pastor David Williams at Faith Assembly.',
+        value: {
+          email: 'pastor@faithassembly.org',
+          password: 'Password@123',
+        },
+      },
+      faith_user_login_helper: {
+        summary: '👤 USER LOGIN - Faith Church Helper',
+        description: 'Login as Lisa Brown as helper at Faith Assembly.',
+        value: {
+          email: 'helper@faithassembly.org',
+          password: 'Password@123',
+        },
+      },
+      faith_user_login_member: {
+        summary: '👤 USER LOGIN - Faith Church Member',
+        description: 'Login as Mark Davis as member at Faith Assembly.',
+        value: {
+          email: 'member@faithassembly.org',
+          password: 'Password@123',
+        },
+      },
+
+      // ───────────────── SYSTEM ADMIN ─────────────────
+      super_admin_login: {
+        summary: '👑 SUPER ADMIN LOGIN',
+        description: 'Login as system super administrator.',
+        value: {
+          email: appConfig().defaultUser.system.email || 'superadmin@gmail.com',
+          password: appConfig().defaultUser.system.password || '12345678',
+        },
+      },
+
+      // ───────────────── 2FA EXAMPLE ─────────────────
+      two_factor_login: {
+        summary: '🔐 Login with 2FA',
+        description:
+          'Example with 2FA token for users who have two-factor authentication enabled.',
+        value: {
+          email: 'user@example.com',
           password: 'password123',
           token: '123456',
         },
       },
     },
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Login successful - Returns JWT tokens',
-    schema: {
-      example: {
-        success: true,
-        message: 'Logged in successfully',
-        authorization: {
-          type: 'bearer',
-          access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-          refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-        },
-        type: 'USER',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad request - Invalid credentials or validation failed',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - Email not verified, invalid password, or invalid 2FA token',
-  })
-  async login(
-    @Req() req: Request & { user: any },
+  async unifiedLogin(
+    @Body() loginDto: UnifiedLoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const user_id = req.user.id;
-    const user_email = req.user.email;
+    const result = await this.authService.unifiedLogin(loginDto);
 
-    const response = await this.authService.login({
-      userId: user_id,
-      email: user_email,
-    });
+    if (result.authorization?.refresh_token) {
+      res.cookie('refresh_token', result.authorization.refresh_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 1000 * 60 * 60 * 24 * 7,
+      });
+    }
 
-    res.cookie('refresh_token', response.authorization.refresh_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      maxAge: 1000 * 60 * 60 * 24 * 7,
-    });
-
-    return response;
+    return result;
   }
 
   // User profile update endpoint
@@ -241,7 +354,8 @@ Note: Refresh token is also set as httpOnly secure cookie`,
   @Patch('update')
   @ApiOperation({
     summary: 'Update user profile',
-    description: 'Update user information and/or profile image. Image must be less than 5MB.',
+    description:
+      'Update user information and/or profile image. Image must be less than 5MB.',
   })
   @ApiBody({
     description: 'User data and optional image file',
@@ -583,7 +697,8 @@ Note: Refresh token is also set as httpOnly secure cookie`,
   @Post('change-password')
   @ApiOperation({
     summary: 'Change user password',
-    description: 'Change password for authenticated user. Old password must be valid and new password must be at least 8 characters.',
+    description:
+      'Change password for authenticated user. Old password must be valid and new password must be at least 8 characters.',
   })
   @ApiBody({
     schema: {
@@ -591,7 +706,11 @@ Note: Refresh token is also set as httpOnly secure cookie`,
       required: ['old_password', 'new_password'],
       properties: {
         old_password: { type: 'string', description: 'Current password' },
-        new_password: { type: 'string', minLength: 8, description: 'New password (min 8 characters)' },
+        new_password: {
+          type: 'string',
+          minLength: 8,
+          description: 'New password (min 8 characters)',
+        },
       },
     },
   })
@@ -654,7 +773,8 @@ Note: Refresh token is also set as httpOnly secure cookie`,
   @Post('church/register')
   @ApiOperation({
     summary: 'Register a new church',
-    description: 'Create a new church account with required details. Church email and name must be unique.',
+    description:
+      'Create a new church account with required details. Church email and name must be unique.',
   })
   @ApiBody({
     type: CreateChurchDto,
@@ -694,61 +814,6 @@ Note: Refresh token is also set as httpOnly secure cookie`,
   async createChurch(@Body() createChurchDto: CreateChurchDto) {
     try {
       return await this.authService.createChurch(createChurchDto);
-    } catch (error: any) {
-      throw new HttpException(
-        {
-          success: false,
-          message: error.message,
-        },
-        error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Post('church/login')
-  @ApiOperation({
-    summary: 'Church login',
-    description: 'Authenticate church with email and password. Returns JWT access and refresh tokens. Church must be in ACTIVE status.',
-  })
-  @ApiBody({
-    type: ChurchLoginDto,
-    description: 'Church credentials',
-    examples: {
-      church: {
-        summary: 'Church Login',
-        value: {
-          church_email: 'church@example.com',
-          church_password: 'SecurePassword123',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Church login successful',
-    schema: {
-      example: {
-        success: true,
-        message: 'Logged in successfully',
-        authorization: {
-          type: 'bearer',
-          access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-          refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid church email or password',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Church account is not active',
-  })
-  async churchLogin(@Body() churchLoginDto: ChurchLoginDto) {
-    try {
-      return await this.authService.churchLogin(churchLoginDto);
     } catch (error: any) {
       throw new HttpException(
         {
@@ -895,14 +960,19 @@ Note: Refresh token is also set as httpOnly secure cookie`,
   @Post('request-email-change')
   @ApiOperation({
     summary: 'Request email change',
-    description: 'Request to change email address. Sends verification code to new email.',
+    description:
+      'Request to change email address. Sends verification code to new email.',
   })
   @ApiBody({
     schema: {
       type: 'object',
       required: ['email'],
       properties: {
-        email: { type: 'string', format: 'email', description: 'New email address' },
+        email: {
+          type: 'string',
+          format: 'email',
+          description: 'New email address',
+        },
       },
     },
   })
@@ -920,7 +990,10 @@ Note: Refresh token is also set as httpOnly secure cookie`,
     status: 401,
     description: 'Unauthorized or user not found',
   })
-  async requestEmailChange(@Req() req: Request, @Body() data: { email: string }) {
+  async requestEmailChange(
+    @Req() req: Request,
+    @Body() data: { email: string },
+  ) {
     try {
       const user_id = req.user.userId;
       return await this.authService.requestEmailChange(user_id, data.email);
@@ -985,7 +1058,8 @@ Note: Refresh token is also set as httpOnly secure cookie`,
   @Post('generate-2fa-secret')
   @ApiOperation({
     summary: 'Generate 2FA secret',
-    description: 'Generate a new 2FA secret for user. Returns QR code and backup codes.',
+    description:
+      'Generate a new 2FA secret for user. Returns QR code and backup codes.',
   })
   @ApiResponse({
     status: 200,
@@ -1027,7 +1101,10 @@ Note: Refresh token is also set as httpOnly secure cookie`,
       type: 'object',
       required: ['token'],
       properties: {
-        token: { type: 'string', description: 'OTP token from authenticator app' },
+        token: {
+          type: 'string',
+          description: 'OTP token from authenticator app',
+        },
       },
     },
   })

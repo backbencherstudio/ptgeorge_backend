@@ -25,9 +25,10 @@ import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from 'src/modules/auth/guards/permissions.guard';
 import { RequirePermission } from 'src/modules/auth/decorators/require-permission.decorator';
+import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 @ApiTags('Church Role Assignment')
-@ApiBearerAuth()
+@ApiBearerAuth(SWAGGER_AUTH.CHURCH_MAIN_ADMIN)
 @Controller('church/roles')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ChurchRoleAssignmentController {

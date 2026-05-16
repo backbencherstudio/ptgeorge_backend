@@ -285,7 +285,7 @@ const churchUsers = {
     {
       first_name: 'John',
       last_name: 'Smith',
-      email: 'church_main_admin@gracechurch.org',  // Clear role identification
+      email: 'admin@gracechurch.org', // ← FIXED: Changed from church_main_admin@...
       phone: '+1 212 555 0001',
       role: 'church_main_admin',
       type: 'CHURCH_ADMIN' as const,
@@ -293,7 +293,7 @@ const churchUsers = {
     {
       first_name: 'Father Michael',
       last_name: 'Anderson',
-      email: 'pastor@gracechurch.org',  // Easy to identify as pastor
+      email: 'pastor@gracechurch.org',
       phone: '+1 212 555 0002',
       role: 'pastor',
       type: 'USER' as const,
@@ -301,7 +301,7 @@ const churchUsers = {
     {
       first_name: 'Rev. Sarah',
       last_name: 'Johnson',
-      email: 'assistant_pastor@gracechurch.org',  // Clear role
+      email: 'assistant_pastor@gracechurch.org',
       phone: '+1 212 555 0003',
       role: 'assistant_pastor',
       type: 'USER' as const,
@@ -309,7 +309,7 @@ const churchUsers = {
     {
       first_name: 'Michael',
       last_name: 'Chen',
-      email: 'church_leader@gracechurch.org',  // Role-based email
+      email: 'leader@gracechurch.org', // ← Changed from church_leader@...
       phone: '+1 212 555 0110',
       role: 'church_leader',
       type: 'USER' as const,
@@ -317,7 +317,7 @@ const churchUsers = {
     {
       first_name: 'Robert',
       last_name: 'Wilson',
-      email: 'background_checker@gracechurch.org',  // Role-based email
+      email: 'checker@gracechurch.org', // ← Changed from background_checker@...
       phone: '+1 212 555 0004',
       role: 'background_checker',
       type: 'USER' as const,
@@ -325,7 +325,7 @@ const churchUsers = {
     {
       first_name: 'David',
       last_name: 'Kim',
-      email: 'helper@gracechurch.org',  // Simple role-based email
+      email: 'helper@gracechurch.org',
       phone: '+1 212 555 0005',
       role: 'helper',
       type: 'USER' as const,
@@ -333,7 +333,7 @@ const churchUsers = {
     {
       first_name: 'Emily',
       last_name: 'Rodriguez',
-      email: 'church_member@gracechurch.org',  // Clear role
+      email: 'member@gracechurch.org', // ← Changed from church_member@...
       phone: '+1 212 555 0006',
       role: 'church_member',
       type: 'USER' as const,
@@ -341,7 +341,7 @@ const churchUsers = {
     {
       first_name: 'James',
       last_name: 'Wilson',
-      email: 'verified_pros@gracechurch.org',  // Role-based email
+      email: 'pro@gracechurch.org', // ← Changed from verified_pros@...
       phone: '+1 212 555 0007',
       role: 'verified_pros',
       type: 'PRO_USER' as const,
@@ -351,7 +351,7 @@ const churchUsers = {
     {
       first_name: 'Michael',
       last_name: 'Johnson',
-      email: 'church_main_admin@faithassembly.org',  // Church-specific + role
+      email: 'admin@faithassembly.org', // ← FIXED
       phone: '+1 310 555 0001',
       role: 'church_main_admin',
       type: 'CHURCH_ADMIN' as const,
@@ -359,7 +359,7 @@ const churchUsers = {
     {
       first_name: 'Pastor David',
       last_name: 'Williams',
-      email: 'pastor@faithassembly.org',  // Role-based
+      email: 'pastor@faithassembly.org',
       phone: '+1 310 555 0002',
       role: 'pastor',
       type: 'USER' as const,
@@ -367,7 +367,7 @@ const churchUsers = {
     {
       first_name: 'Lisa',
       last_name: 'Brown',
-      email: 'helper@faithassembly.org',  // Role-based
+      email: 'helper@faithassembly.org',
       phone: '+1 310 555 0003',
       role: 'helper',
       type: 'USER' as const,
@@ -375,7 +375,7 @@ const churchUsers = {
     {
       first_name: 'Mark',
       last_name: 'Davis',
-      email: 'church_member@faithassembly.org',  // Role-based
+      email: 'member@faithassembly.org', // ← Changed from church_member@...
       phone: '+1 310 555 0004',
       role: 'church_member',
       type: 'USER' as const,

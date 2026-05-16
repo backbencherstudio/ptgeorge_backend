@@ -231,31 +231,44 @@ export class CreateUserDto {
   type?: UserType;
 }
 
-// login.dto.ts
 export class LoginDto {
   @ApiProperty({
-    example: 'john@example.com',
-    description: 'User email address',
-    required: true,
+    example: 'admin@gracechurch.org',
+    description: 'Email address',
   })
   @IsEmail()
-  @IsNotEmpty()
   email: string;
 
-  @ApiProperty({
-    example: 'password123',
-    description: 'User password (minimum 6 characters)',
-    required: true,
-    minLength: 6,
-  })
+  @ApiProperty({ example: 'Password@123', description: 'Password' })
   @IsString()
-  @IsNotEmpty()
-  @MinLength(6)
   password: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
+    required: false,
     example: '123456',
-    description: '2FA token from authenticator app (required if 2FA is enabled)',
+    description: '2FA token if enabled',
+  })
+  @IsOptional()
+  @IsString()
+  token?: string;
+}
+
+export class UnifiedLoginDto {
+  @ApiProperty({
+    example: 'admin@gracechurch.org',
+    description: 'Email address (user or church email)',
+  })
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ example: 'Password@123', description: 'Password' })
+  @IsString()
+  password: string;
+
+  @ApiProperty({
+    required: false,
+    example: '123456',
+    description: '2FA token if enabled',
   })
   @IsOptional()
   @IsString()

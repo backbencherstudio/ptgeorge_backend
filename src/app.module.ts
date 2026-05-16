@@ -21,6 +21,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { PrometheusModule } from './prometheus/prometheus.module';
 import { RepositoryModule } from './common/repository/repository.module';
+import { ChurchAdminApplicationModule } from './modules/church-admin/church-admin.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { RepositoryModule } from './common/repository/repository.module';
     MailModule,
     ApplicationModule,
     AdminModule,
+    ChurchAdminApplicationModule,
     ChatModule,
     PrometheusModule,
   ],

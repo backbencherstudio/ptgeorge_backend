@@ -17,6 +17,7 @@ import {
   swaggerUiOptions,
 } from './common/swagger/swagger-auth';
 import { NextFunction, Request, Response } from 'express';
+import { helmetConfig } from './common/config/helmet.cofig';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -29,23 +30,7 @@ async function bootstrap() {
     origin: true,
     credentials: true,
   });
-  app.use(
-    helmet({
-      crossOriginResourcePolicy: { policy: 'cross-origin' }, // ← add this
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: [`'self'`],
-          connectSrc: [`'self'`, `https:`, `http:`],
-          scriptSrc: [`'self'`, `'unsafe-inline'`, `'unsafe-eval'`],
-          styleSrc: [`'self'`, `'unsafe-inline'`],
-          imgSrc: [`'self'`, `data:`, `https:`, `http:`], // ← also add http: here
-          workerSrc: [`'self'`, `blob:`],
-          frameSrc: [`'self'`],
-        },
-      },
-      crossOriginEmbedderPolicy: false,
-    }),
-  );
+  app.use(helmetConfig());
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const url = req.originalUrl || req.url;

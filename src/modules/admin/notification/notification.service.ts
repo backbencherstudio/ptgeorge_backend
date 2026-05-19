@@ -7,6 +7,7 @@ import { UserType } from 'prisma/generated/client';
 
 @Injectable()
 export class NotificationService {
+  
   constructor(
     private prisma: PrismaService,
     private userRepository: UserRepository,

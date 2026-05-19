@@ -364,6 +364,8 @@ export class AuthService {
 
       if (updateUserDto.address) data.address = updateUserDto.address;
 
+      if (updateUserDto.type) data.type = updateUserDto.type;
+
       if (image) {
         // delete old image from storage
         const oldImage = await this.prisma.user.findFirst({

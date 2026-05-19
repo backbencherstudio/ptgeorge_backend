@@ -13,10 +13,16 @@
     "ignoreDeprecations": "5.0",
     "incremental": true,
     "skipLibCheck": true,
+
+    "strict": false,
     "strictNullChecks": false,
     "noImplicitAny": false,
     "strictBindCallApply": false,
+    "useUnknownInCatchVariables": false,
+
     "forceConsistentCasingInFileNames": false,
-    "noFallthroughCasesInSwitch": false
+    "noFallthroughCasesInSwitch": false,
+
+    "typeRoots": ["./node_modules/@types", "./src/types"]
   }
 }

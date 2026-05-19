@@ -117,9 +117,10 @@ model User {
   church    Church? @relation(fields: [church_id], references: [id])
 
   // --- Other Relation --- 
-  ucodes               Ucode[]
-  roles_assigned_to_me RoleUser[] @relation("UserRoles")
-  roles_i_assigned     RoleUser[] @relation("RoleAssignment")
+  ucodes                   Ucode[]
+  roles_assigned_to_me     RoleUser[]                @relation("UserRoles")
+  roles_i_assigned         RoleUser[]                @relation("RoleAssignment")
+  userNotificationSettings UserNotificationSetting[]
 
   @@map("users")
 }
@@ -176,15 +177,14 @@ model Church {
 
   church_members Int? @default(0)
 
-  status ChurchStatus @default(PENDING)
+  status    ChurchStatus   @default(PENDING)
   auth_type ChurchAuthType @default(CHURCH_ADMIN)
 
   // relations
   users     User[]
   roleUsers RoleUser[]
 
-  @@map("churches") 
-
+  @@map("churches")
 }
 
 /**
@@ -195,7 +195,7 @@ model Church {
 
 /**
  * ---------------------------------------------------------------------
- * Chating and Notification Schema start
+ * Chating  Schema start
  * ---------------------------------------------------------------------
  */
 
@@ -247,26 +247,36 @@ model Message {
   attachments String[] @db.Text
 }
 
-// -------------------------notification schema---------------------------------
+/**
+ * ---------------------------------------------------------------------
+ * Chating  Schema End
+ * ---------------------------------------------------------------------
+ */
+/**
+ * ---------------------------------------------------------------------
+ * Notification Schema Start
+ * ---------------------------------------------------------------------
+ */
 
 model NotificationEvent {
-  id            String         @id @default(uuid())
-  created_at    DateTime       @default(now())
-  updated_at    DateTime       @default(now()) @updatedAt
-  deleted_at    DateTime?
-  status        Int?           @default(1) @db.SmallInt
+  id         String   @id @default(uuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  status Int? @default(1) @db.SmallInt
+
   type          String?
   text          String?
   notifications Notification[]
 }
 
 model Notification {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now()) @updatedAt
-  deleted_at DateTime?
-  read_at    DateTime?
-  status     Int?      @default(1) @db.SmallInt
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  read_at DateTime?
+  status  Int?      @default(1) @db.SmallInt
 
   sender_id String?
   sender    User?   @relation("notificationSender", fields: [sender_id], references: [id])
@@ -278,6 +288,28 @@ model Notification {
   notification_event    NotificationEvent? @relation(fields: [notification_event_id], references: [id])
 
   entity_id String?
+}
+
+enum NotificationSettingType {
+  NEW_REQUEST_ALERT
+  APPROVAL_CONFIRMATION
+  ROLE_ASSIGNMENT_ALERT
+}
+
+model UserNotificationSetting {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  type       NotificationSettingType
+  is_enabled Boolean                 @default(true)
+
+  @@unique([user_id, type])
+  @@index([user_id])
+  @@map("user_notification_settings")
 }
 
 /**
@@ -320,14 +352,14 @@ model Permission {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  status  PermissionStatus @default(ACTIVE)   // ← changed from Int to enum
-  title   String?                              // "Manage Churches"
-  name    String?          @unique             // auto-generated key: "manage_church"
-  action  PermissionAction?                    // manage | read | create | update | delete
-  category String?                             // "Church" — UI grouping label
-  description String?      @db.Text            // human-readable description
-  conditions String?                           // reserved for future CASL row-level rules
-  fields     String?                           // reserved for future CASL field-level rules
+  status      PermissionStatus  @default(ACTIVE)
+  title       String?
+  name        String?           @unique
+  action      PermissionAction? // manage | read | create | update | delete
+  category    String? // "Church" — UI grouping label
+  description String?           @db.Text // human-readable description
+  conditions  String? // reserved for future CASL row-level rules
+  fields      String? // reserved for future CASL field-level rules
 
   permission_roles PermissionRole[]
   roles            Role[]           @relation("PermissionToRole")

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { UserType } from 'prisma/generated/client';
+import { UserStatus, UserType } from 'prisma/generated/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 @Injectable()
@@ -10,7 +10,7 @@ export class UserService {
     try {
       const users = await this.prisma.user.findMany({
         where: {
-          status: 1,
+          status: UserStatus.ACTIVE,
           type: {
             not: UserType.ADMIN,
           },

@@ -13,15 +13,12 @@ export class CreateMemberDto {
   @IsNotEmpty()
   first_name: string;
 
-  @ApiProperty({ example: 'Doe', description: 'Last name' })
+  @ApiProperty({ example: 'Smith', description: 'Last name' })
   @IsString()
   @IsNotEmpty()
   last_name: string;
 
-  @ApiProperty({
-    example: 'john@gracechurch.org',
-    description: 'Personal email',
-  })
+  @ApiProperty({ example: 'john@example.com', description: 'Email address' })
   @IsEmail()
   @IsNotEmpty()
   email: string;
@@ -31,17 +28,37 @@ export class CreateMemberDto {
   @IsNotEmpty()
   phone_number: string;
 
+  @ApiPropertyOptional({ example: 'en', description: 'Language' })
+  @IsOptional()
+  @IsString()
+  language?: string;
+
   @ApiPropertyOptional({
     example: 'Password@123',
     description: 'Password (auto-generated if not provided)',
   })
   @IsOptional()
   @IsString()
-  @MinLength(6)
   password?: string;
 
-  @ApiProperty({ example: 'pastor', description: 'Role name to assign' })
+  @ApiPropertyOptional({
+    example: 'CHURCH_MEMBER',
+    description: 'System role name',
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  role_name: string;
+  role_name?: string;
+
+  @ApiPropertyOptional({
+    example: 'Member',
+    description: 'Role within the church',
+  })
+  @IsOptional()
+  @IsString()
+  church_role?: string;
+
+  @ApiPropertyOptional({ description: 'Church ID (required for super admin)' })
+  @IsOptional()
+  @IsString()
+  church_id?: string;
 }

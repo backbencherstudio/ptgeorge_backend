@@ -34,16 +34,15 @@ enum UserType {
   SUPER_ADMIN
   ADMIN
   CHURCH_ADMIN
-  CHURCH_MAIN_ADMIN
-  CHURCH_LEADER
-  PASTOR
-  ASSISTANT_PASTOR
-  BACKGROUND_CHECKER
-  HELPER
-  CHURCH_MEMBER
-  VERIFIED_PRO
   USER
   PRO_USER
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
 }
 
 model User {
@@ -51,7 +50,7 @@ model User {
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now())
   deleted_at DateTime?
-  status     Int?      @default(1) @db.SmallInt
+  status     UserStatus? @default(PENDING)
 
   first_name   String @db.VarChar(255)
   last_name    String @db.VarChar(255)
@@ -82,10 +81,9 @@ model User {
   business_portfolio String? @db.Text
   description        String? @db.Text
 
-
   // fcm token for push notifications 
   google_id     String? @unique 
-  apple_id     String? @unique
+  apple_id      String? @unique
 
   // other info
   avatar   String?
@@ -134,6 +132,7 @@ model User {
   roles_assigned_to_me     RoleUser[]                @relation("UserRoles")
   roles_i_assigned         RoleUser[]                @relation("RoleAssignment")
   userNotificationSettings UserNotificationSetting[]
+  church_memberships ChurchMember[]
 
   @@map("users")
 }
@@ -183,14 +182,13 @@ model Church {
 
   church_name      String @db.VarChar(255)
   church_city      String @db.VarChar(255)
-  church_email     String @db.VarChar(255)
-  church_domain    String @db.VarChar(255)
-  church_password  String @db.VarChar(255)
+  church_email     String @unique
+  church_domain    String @unique
   church_adminname String @db.VarChar(255)
 
   // fcm token for push notifications 
   google_id     String? @unique 
-  apple_id     String? @unique
+  apple_id      String? @unique
 
   church_members Int? @default(0)
 
@@ -200,8 +198,51 @@ model Church {
   // relations
   users     User[]
   roleUsers RoleUser[]
+  members ChurchMember[]
 
   @@map("churches")
+}
+
+model ChurchMember {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  church_id   String
+  church      Church   @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  // Role within the church (separate from system roles)
+  church_role  String?  @db.VarChar(100) // e.g., "Helper", "Member", "Leader", "Pastor"
+  
+  // Status within the church
+  status       ChurchMemberStatus @default(ACTIVE)
+  
+  // When they joined the church
+  joined_at    DateTime @default(now())
+  
+  // Who approved them
+  approved_by  String?
+  approved_at  DateTime?
+  
+  // Additional metadata
+  notes        String?  @db.Text
+  
+  @@unique([church_id, user_id])
+  @@index([church_id])
+  @@index([user_id])
+  @@index([status])
+  @@map("church_members")
+}
+
+enum ChurchMemberStatus {
+  PENDING   // Waiting for approval
+  ACTIVE    // Active member
+  INACTIVE  // Inactive member
+  REMOVED   // Removed from church
 }
 
 /**
@@ -212,7 +253,7 @@ model Church {
 
 /**
  * ---------------------------------------------------------------------
- * Chating  Schema start
+ * Chatting Schema start
  * ---------------------------------------------------------------------
  */
 
@@ -266,9 +307,10 @@ model Message {
 
 /**
  * ---------------------------------------------------------------------
- * Chating  Schema End
+ * Chatting Schema End
  * ---------------------------------------------------------------------
  */
+
 /**
  * ---------------------------------------------------------------------
  * Notification Schema Start
@@ -331,7 +373,7 @@ model UserNotificationSetting {
 
 /**
  * ---------------------------------------------------------------------
- * Chating and Notification Schema end
+ * Notification Schema end
  * ---------------------------------------------------------------------
  */
 
@@ -372,11 +414,11 @@ model Permission {
   status      PermissionStatus  @default(ACTIVE)
   title       String?
   name        String?           @unique
-  action      PermissionAction? // manage | read | create | update | delete
-  category    String? // "Church" — UI grouping label
-  description String?           @db.Text // human-readable description
-  conditions  String? // reserved for future CASL row-level rules
-  fields      String? // reserved for future CASL field-level rules
+  action      PermissionAction?
+  category    String?
+  description String?           @db.Text
+  conditions  String?
+  fields      String?
 
   permission_roles PermissionRole[]
   roles            Role[]           @relation("PermissionToRole")
@@ -418,7 +460,6 @@ model RoleUser {
   @@map("role_users")
 }
 
-// who can assign which roles
 model RoleAssignmentRule {
   id           String   @id @default(cuid())
   created_at   DateTime @default(now())

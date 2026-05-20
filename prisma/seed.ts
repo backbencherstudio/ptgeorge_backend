@@ -14,55 +14,79 @@ async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, saltRounds);
 }
 
-// Define roles data
+// Define roles data - UPPERCASE to match Role enum
 const rolesData = [
   {
+    title: 'Super Admin',
+    name: 'SUPER_ADMIN',
+    description: 'System super administrator with full access',
+    color: '#FF0000',
+  },
+  {
+    title: 'Admin',
+    name: 'ADMIN',
+    description: 'System administrator',
+    color: '#FF6B6B',
+  },
+  {
+    title: 'Church Admin',
+    name: 'CHURCH_ADMIN',
+    description: 'Church administrator',
+    color: '#FF8C00',
+  },
+  {
     title: 'Church Main Admin',
-    name: 'church_main_admin',
+    name: 'CHURCH_MAIN_ADMIN',
     description: 'Full control over church management',
     color: '#FF6B6B',
   },
   {
     title: 'Church Leader',
-    name: 'church_leader',
+    name: 'CHURCH_LEADER',
     description: 'Church leadership role with limited assignment rights',
     color: '#4ECDC4',
   },
   {
     title: 'Pastor',
-    name: 'pastor',
+    name: 'PASTOR',
     description: 'Church pastor',
     color: '#45B7D1',
   },
   {
     title: 'Assistant Pastor',
-    name: 'assistant_pastor',
+    name: 'ASSISTANT_PASTOR',
     description: 'Assistant to the pastor',
     color: '#96CEB4',
   },
   {
     title: 'Background Checker',
-    name: 'background_checker',
+    name: 'BACKGROUND_CHECKER',
     description: 'Performs background checks',
     color: '#FFEAA7',
   },
   {
     title: 'Helper',
-    name: 'helper',
+    name: 'HELPER',
     description: 'Church helper/volunteer',
     color: '#DDA0DD',
   },
   {
     title: 'Church Member',
-    name: 'church_member',
+    name: 'CHURCH_MEMBER',
     description: 'Regular church member',
     color: '#98D8C8',
   },
   {
-    title: 'Verified Pros',
-    name: 'verified_pros',
+    title: 'Verified Pro',
+    name: 'VERIFIED_PRO',
     description: 'Verified professional members',
     color: '#F7B731',
+  },
+  {
+    title: 'Regular User',
+    name: 'USER',
+    description: 'Regular platform user',
+    color: '#A0A0A0',
   },
 ];
 
@@ -176,8 +200,8 @@ const permissionsData = [
 ];
 
 // Define role-permission assignments (which role gets which permissions)
-const rolePermissionsMap = {
-  church_main_admin: [
+const rolePermissionsMap: Record<string, string[]> = {
+  SUPER_ADMIN: [
     'assign_role',
     'manage_role_assignments',
     'view_role_assignments',
@@ -193,7 +217,49 @@ const rolePermissionsMap = {
     'publish_content',
     'view_content',
   ],
-  church_leader: [
+  ADMIN: [
+    'assign_role',
+    'manage_role_assignments',
+    'view_role_assignments',
+    'view_church_members',
+    'manage_church_members',
+    'add_church_members',
+    'edit_church_members',
+    'delete_church_members',
+    'manage_church_settings',
+    'view_church_settings',
+    'update_church_settings',
+    'manage_content',
+    'publish_content',
+    'view_content',
+  ],
+  CHURCH_ADMIN: [
+    'view_church_members',
+    'manage_church_members',
+    'add_church_members',
+    'edit_church_members',
+    'view_church_settings',
+    'update_church_settings',
+    'view_content',
+    'publish_content',
+  ],
+  CHURCH_MAIN_ADMIN: [
+    'assign_role',
+    'manage_role_assignments',
+    'view_role_assignments',
+    'view_church_members',
+    'manage_church_members',
+    'add_church_members',
+    'edit_church_members',
+    'delete_church_members',
+    'manage_church_settings',
+    'view_church_settings',
+    'update_church_settings',
+    'manage_content',
+    'publish_content',
+    'view_content',
+  ],
+  CHURCH_LEADER: [
     'assign_role',
     'view_role_assignments',
     'view_church_members',
@@ -202,7 +268,7 @@ const rolePermissionsMap = {
     'view_church_settings',
     'view_content',
   ],
-  pastor: [
+  PASTOR: [
     'assign_role',
     'view_role_assignments',
     'view_church_members',
@@ -212,49 +278,73 @@ const rolePermissionsMap = {
     'publish_content',
     'view_content',
   ],
-  assistant_pastor: [
+  ASSISTANT_PASTOR: [
     'assign_role',
     'view_role_assignments',
     'view_church_members',
     'add_church_members',
     'view_content',
   ],
-  background_checker: [
+  BACKGROUND_CHECKER: [
     'assign_role',
     'view_role_assignments',
     'view_church_members',
   ],
-  helper: ['view_church_members', 'view_content'],
-  church_member: ['view_content'],
-  verified_pros: ['view_content'],
+  HELPER: ['view_church_members', 'view_content'],
+  CHURCH_MEMBER: ['view_content'],
+  VERIFIED_PRO: ['view_content'],
+  USER: ['view_content'],
 };
 
 // Define role assignment rules (who can assign which roles)
 const roleAssignmentRules = [
-  // Church Main Admin can assign ALL roles
-  { from_role: 'church_main_admin', to_role: 'pastor' },
-  { from_role: 'church_main_admin', to_role: 'assistant_pastor' },
-  { from_role: 'church_main_admin', to_role: 'church_leader' },
-  { from_role: 'church_main_admin', to_role: 'background_checker' },
-  { from_role: 'church_main_admin', to_role: 'helper' },
-  { from_role: 'church_main_admin', to_role: 'church_member' },
-  { from_role: 'church_main_admin', to_role: 'verified_pros' },
+  // Super Admin can assign all roles
+  { from_role: 'SUPER_ADMIN', to_role: 'ADMIN' },
+  { from_role: 'SUPER_ADMIN', to_role: 'CHURCH_ADMIN' },
+  { from_role: 'SUPER_ADMIN', to_role: 'CHURCH_MAIN_ADMIN' },
+  { from_role: 'SUPER_ADMIN', to_role: 'PASTOR' },
+  { from_role: 'SUPER_ADMIN', to_role: 'ASSISTANT_PASTOR' },
+  { from_role: 'SUPER_ADMIN', to_role: 'CHURCH_LEADER' },
+  { from_role: 'SUPER_ADMIN', to_role: 'BACKGROUND_CHECKER' },
+  { from_role: 'SUPER_ADMIN', to_role: 'HELPER' },
+  { from_role: 'SUPER_ADMIN', to_role: 'CHURCH_MEMBER' },
+  { from_role: 'SUPER_ADMIN', to_role: 'VERIFIED_PRO' },
+  { from_role: 'SUPER_ADMIN', to_role: 'USER' },
+
+  // Admin can assign most roles
+  { from_role: 'ADMIN', to_role: 'CHURCH_ADMIN' },
+  { from_role: 'ADMIN', to_role: 'CHURCH_MAIN_ADMIN' },
+  { from_role: 'ADMIN', to_role: 'PASTOR' },
+  { from_role: 'ADMIN', to_role: 'HELPER' },
+  { from_role: 'ADMIN', to_role: 'CHURCH_MEMBER' },
+  { from_role: 'ADMIN', to_role: 'VERIFIED_PRO' },
+  { from_role: 'ADMIN', to_role: 'USER' },
+
+  // Church Main Admin can assign church-specific roles
+  { from_role: 'CHURCH_MAIN_ADMIN', to_role: 'PASTOR' },
+  { from_role: 'CHURCH_MAIN_ADMIN', to_role: 'ASSISTANT_PASTOR' },
+  { from_role: 'CHURCH_MAIN_ADMIN', to_role: 'CHURCH_LEADER' },
+  { from_role: 'CHURCH_MAIN_ADMIN', to_role: 'BACKGROUND_CHECKER' },
+  { from_role: 'CHURCH_MAIN_ADMIN', to_role: 'HELPER' },
+  { from_role: 'CHURCH_MAIN_ADMIN', to_role: 'CHURCH_MEMBER' },
+  { from_role: 'CHURCH_MAIN_ADMIN', to_role: 'VERIFIED_PRO' },
+  { from_role: 'CHURCH_MAIN_ADMIN', to_role: 'USER' },
 
   // Church Leader can assign limited roles
-  { from_role: 'church_leader', to_role: 'helper' },
-  { from_role: 'church_leader', to_role: 'church_member' },
+  { from_role: 'CHURCH_LEADER', to_role: 'HELPER' },
+  { from_role: 'CHURCH_LEADER', to_role: 'CHURCH_MEMBER' },
 
   // Pastor can assign limited roles
-  { from_role: 'pastor', to_role: 'helper' },
-  { from_role: 'pastor', to_role: 'church_member' },
+  { from_role: 'PASTOR', to_role: 'HELPER' },
+  { from_role: 'PASTOR', to_role: 'CHURCH_MEMBER' },
 
   // Assistant Pastor can assign limited roles
-  { from_role: 'assistant_pastor', to_role: 'helper' },
-  { from_role: 'assistant_pastor', to_role: 'church_member' },
+  { from_role: 'ASSISTANT_PASTOR', to_role: 'HELPER' },
+  { from_role: 'ASSISTANT_PASTOR', to_role: 'CHURCH_MEMBER' },
 
   // Background Checker can assign limited roles
-  { from_role: 'background_checker', to_role: 'helper' },
-  { from_role: 'background_checker', to_role: 'church_member' },
+  { from_role: 'BACKGROUND_CHECKER', to_role: 'HELPER' },
+  { from_role: 'BACKGROUND_CHECKER', to_role: 'CHURCH_MEMBER' },
 ];
 
 // Define church data
@@ -280,105 +370,123 @@ const churchesData = [
 ];
 
 // Define users for each church with role-based email naming
-const churchUsers = {
+const churchUsers: Record<
+  string,
+  Array<{
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone: string;
+    role: string;
+    type: 'SUPER_ADMIN' | 'ADMIN' | 'CHURCH_ADMIN' | 'USER' | 'PRO_USER';
+  }>
+> = {
   'Grace Community Church': [
     {
       first_name: 'John',
       last_name: 'Smith',
-      email: 'admin@gracechurch.org', // ← FIXED: Changed from church_main_admin@...
+      email: 'admin@gracechurch.org',
       phone: '+1 212 555 0001',
-      role: 'church_main_admin',
-      type: 'CHURCH_ADMIN' as const,
+      role: 'CHURCH_MAIN_ADMIN',
+      type: 'CHURCH_ADMIN',
     },
     {
       first_name: 'Father Michael',
       last_name: 'Anderson',
       email: 'pastor@gracechurch.org',
       phone: '+1 212 555 0002',
-      role: 'pastor',
-      type: 'USER' as const,
+      role: 'PASTOR',
+      type: 'USER',
     },
     {
       first_name: 'Rev. Sarah',
       last_name: 'Johnson',
       email: 'assistant_pastor@gracechurch.org',
       phone: '+1 212 555 0003',
-      role: 'assistant_pastor',
-      type: 'USER' as const,
+      role: 'ASSISTANT_PASTOR',
+      type: 'USER',
     },
     {
       first_name: 'Michael',
       last_name: 'Chen',
-      email: 'leader@gracechurch.org', // ← Changed from church_leader@...
+      email: 'leader@gracechurch.org',
       phone: '+1 212 555 0110',
-      role: 'church_leader',
-      type: 'USER' as const,
+      role: 'CHURCH_LEADER',
+      type: 'USER',
     },
     {
       first_name: 'Robert',
       last_name: 'Wilson',
-      email: 'checker@gracechurch.org', // ← Changed from background_checker@...
+      email: 'checker@gracechurch.org',
       phone: '+1 212 555 0004',
-      role: 'background_checker',
-      type: 'USER' as const,
+      role: 'BACKGROUND_CHECKER',
+      type: 'USER',
     },
     {
       first_name: 'David',
       last_name: 'Kim',
       email: 'helper@gracechurch.org',
       phone: '+1 212 555 0005',
-      role: 'helper',
-      type: 'USER' as const,
+      role: 'HELPER',
+      type: 'USER',
     },
     {
       first_name: 'Emily',
       last_name: 'Rodriguez',
-      email: 'member@gracechurch.org', // ← Changed from church_member@...
+      email: 'member@gracechurch.org',
       phone: '+1 212 555 0006',
-      role: 'church_member',
-      type: 'USER' as const,
+      role: 'CHURCH_MEMBER',
+      type: 'USER',
     },
     {
       first_name: 'James',
       last_name: 'Wilson',
-      email: 'pro@gracechurch.org', // ← Changed from verified_pros@...
+      email: 'pro@gracechurch.org',
       phone: '+1 212 555 0007',
-      role: 'verified_pros',
-      type: 'PRO_USER' as const,
+      role: 'VERIFIED_PRO',
+      type: 'PRO_USER',
+    },
+    {
+      first_name: 'Regular',
+      last_name: 'User',
+      email: 'user@gracechurch.org',
+      phone: '+1 212 555 0008',
+      role: 'USER',
+      type: 'USER',
     },
   ],
   'Faith Assembly Church': [
     {
       first_name: 'Michael',
       last_name: 'Johnson',
-      email: 'admin@faithassembly.org', // ← FIXED
+      email: 'admin@faithassembly.org',
       phone: '+1 310 555 0001',
-      role: 'church_main_admin',
-      type: 'CHURCH_ADMIN' as const,
+      role: 'CHURCH_MAIN_ADMIN',
+      type: 'CHURCH_ADMIN',
     },
     {
       first_name: 'Pastor David',
       last_name: 'Williams',
       email: 'pastor@faithassembly.org',
       phone: '+1 310 555 0002',
-      role: 'pastor',
-      type: 'USER' as const,
+      role: 'PASTOR',
+      type: 'USER',
     },
     {
       first_name: 'Lisa',
       last_name: 'Brown',
       email: 'helper@faithassembly.org',
       phone: '+1 310 555 0003',
-      role: 'helper',
-      type: 'USER' as const,
+      role: 'HELPER',
+      type: 'USER',
     },
     {
       first_name: 'Mark',
       last_name: 'Davis',
-      email: 'member@faithassembly.org', // ← Changed from church_member@...
+      email: 'member@faithassembly.org',
       phone: '+1 310 555 0004',
-      role: 'church_member',
-      type: 'USER' as const,
+      role: 'CHURCH_MEMBER',
+      type: 'USER',
     },
   ],
 };
@@ -403,7 +511,6 @@ async function main() {
       status: 1,
     };
 
-    // Check if superadmin exists
     let superadmin = await prisma.user.findUnique({
       where: { email: superadminData.email },
     });
@@ -423,9 +530,8 @@ async function main() {
 
     // Step 2: Create Roles
     console.log('\n📝 Step 2: Creating roles...');
-    const createdRoles = new Map();
+    const createdRoles = new Map<string, any>();
     for (const role of rolesData) {
-      // Check if role exists by name (since name is not unique in schema, we check by name field)
       let existingRole = await prisma.role.findFirst({
         where: { name: role.name },
       });
@@ -452,9 +558,8 @@ async function main() {
 
     // Step 3: Create Permissions
     console.log('\n📝 Step 3: Creating permissions...');
-    const createdPermissions = new Map();
+    const createdPermissions = new Map<string, any>();
     for (const permission of permissionsData) {
-      // Check if permission exists by name (name is unique in schema)
       let existingPermission = await prisma.permission.findUnique({
         where: { name: permission.name },
       });
@@ -500,7 +605,6 @@ async function main() {
           continue;
         }
 
-        // Check if assignment already exists
         const existingAssignment = await prisma.permissionRole.findUnique({
           where: {
             permission_id_role_id: {
@@ -537,7 +641,6 @@ async function main() {
         continue;
       }
 
-      // Check if rule already exists
       const existingRule = await prisma.roleAssignmentRule.findUnique({
         where: {
           from_role_id_to_role_id: {
@@ -566,9 +669,8 @@ async function main() {
 
     // Step 6: Create Churches
     console.log('\n📝 Step 6: Creating churches...');
-    const createdChurches = new Map();
+    const createdChurches = new Map<string, any>();
     for (const churchData of churchesData) {
-      // Check if church exists by email (church_email is not unique in schema)
       let existingChurch = await prisma.church.findFirst({
         where: { church_email: churchData.email },
       });
@@ -599,7 +701,6 @@ async function main() {
     // Step 7: Create Users and Assign Roles
     console.log('\n📝 Step 7: Creating church users and assigning roles...');
 
-    // Get system admin user for assignment tracking
     const systemAdmin = await prisma.user.findFirst({
       where: { type: 'SUPER_ADMIN' },
     });
@@ -622,13 +723,11 @@ async function main() {
           continue;
         }
 
-        // Check if user exists
         let user = await prisma.user.findUnique({
           where: { email: userData.email },
         });
 
         if (!user) {
-          // Create user
           user = await prisma.user.create({
             data: {
               id: randomUUID(),
@@ -654,7 +753,6 @@ async function main() {
           );
         }
 
-        // Assign role to user
         const existingAssignment = await prisma.roleUser.findUnique({
           where: {
             role_id_user_id: {
@@ -678,7 +776,6 @@ async function main() {
           console.log(`  ✅ Role already assigned: ${userData.role}`);
         }
 
-        // Update church member count
         const memberCount = await prisma.user.count({
           where: { church_id: church.id, deleted_at: null },
         });

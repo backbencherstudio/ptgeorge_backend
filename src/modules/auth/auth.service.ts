@@ -21,11 +21,12 @@ import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { verifyPassword } from 'src/common/utils/password.util';
-import { ChurchStatus } from 'prisma/generated/enums';
+import { ChurchStatus, UserType } from 'prisma/generated/enums';
 import { CreateChurchDto } from './dto/create-church.dto';
 import { ChurchLoginDto } from './dto/login-church.dto';
 import * as bcrypt from 'bcrypt';
 import { UnifiedLoginDto } from './dto/create-user.dto';
+import { Role } from 'src/common/guard/role/role.enum';
 
 @Injectable()
 export class AuthService {
@@ -189,7 +190,7 @@ export class AuthService {
 
     console.log(`[Login Attempt] Email: ${email}`);
 
-    // FIRST: Try to find as user (since we want user login for role assignment)
+    // Find user by email
     const user = await this.prisma.user.findUnique({
       where: { email },
       include: {
@@ -201,150 +202,83 @@ export class AuthService {
       },
     });
 
-    // If user exists, try user login first
-    if (user) {
-      console.log(`[User Found] Attempting user login...`);
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
 
-      // Check password
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (isPasswordValid) {
-        // Check email verification
-        if (!user.email_verified_at) {
-          throw new UnauthorizedException('Please verify your email first');
-        }
+    console.log(`[User Found] Attempting login...`);
 
-        // Check if user is active
-        if (user.status !== 1) {
-          throw new UnauthorizedException('Your account is inactive');
-        }
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
 
-        // Check 2FA if enabled
-        if (user.is_two_factor_enabled === 1) {
-          if (!token) {
-            throw new UnauthorizedException('2FA token required');
-          }
-        }
+    // Check email verification
+    if (!user.email_verified_at) {
+      throw new UnauthorizedException('Please verify your email first');
+    }
 
-        const currentRole = user.roles_assigned_to_me[0]?.role;
+    // Check if user is active
+    if (user.status !== 1) {
+      throw new UnauthorizedException('Your account is inactive');
+    }
 
-        console.log(
-          `[User Login Success] ${user.email} as ${currentRole?.title || user.type}`,
-        );
+    // Check 2FA if enabled
+    if (user.is_two_factor_enabled === 1) {
+      if (!token) {
+        throw new UnauthorizedException('2FA token required');
+      }
+      // TODO: Verify 2FA token
+    }
 
-        const payload = {
-          sub: user.id,
+    const currentRole = user.roles_assigned_to_me[0]?.role;
+
+    console.log(
+      `[Login Success] ${user.email} as ${currentRole?.title || user.type}`,
+    );
+
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      userId: user.id,
+      type: user.type,
+      role: currentRole?.name || user.type.toLowerCase(),
+      church_id: user.church_id,
+    };
+
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    await this.redis.set(
+      `refresh_token:${user.id}`,
+      refreshToken,
+      'EX',
+      60 * 60 * 24 * 7,
+    );
+
+    return {
+      success: true,
+      message: 'Logged in successfully',
+      data: {
+        type: user.type,
+        role: currentRole?.title || user.type,
+        role_name: currentRole?.name || user.type.toLowerCase(),
+        user: {
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
           email: user.email,
-          userId: user.id,
-          type: user.type,
-          role: currentRole?.name || user.type.toLowerCase(),
           church_id: user.church_id,
-        };
-
-        const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-        await this.redis.set(
-          `refresh_token:${user.id}`,
-          refreshToken,
-          'EX',
-          60 * 60 * 24 * 7,
-        );
-
-        return {
-          success: true,
-          message: 'Logged in successfully',
-          data: {
-            type: user.type,
-            role: currentRole?.title || user.type,
-            role_name: currentRole?.name || user.type.toLowerCase(),
-            user: {
-              id: user.id,
-              first_name: user.first_name,
-              last_name: user.last_name,
-              email: user.email,
-              church_id: user.church_id,
-            },
-          },
-          authorization: {
-            type: 'Bearer',
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            expires_in: 3600,
-          },
-        };
-      } else {
-        console.log(`[User Login] Password invalid for: ${email}`);
-      }
-    }
-
-    // If user login fails, try church login
-    const church = await this.prisma.church.findFirst({
-      where: {
-        OR: [{ church_email: email }, { church_domain: email }],
-        deleted_at: null,
+        },
       },
-    });
-
-    if (church) {
-      console.log(`[Church Found] Attempting church login...`);
-
-      // Church login flow
-      const isPasswordMatched = await verifyPassword(
-        password,
-        church.church_password,
-      );
-
-      if (isPasswordMatched) {
-        if (church.status !== 'ACTIVE') {
-          throw new BadRequestException('Church account is not active');
-        }
-
-        const payload = {
-          sub: church.id,
-          church_id: church.id,
-          church_email: church.church_email,
-          auth_type: church.auth_type,
-          type: 'CHURCH',
-        };
-
-        const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-        await this.redis.set(
-          `refresh_token:church:${church.id}`,
-          refreshToken,
-          'EX',
-          60 * 60 * 24 * 7,
-        );
-
-        console.log(`[Church Login Success] ${church.church_email}`);
-
-        return {
-          success: true,
-          message: 'Church logged in successfully',
-          data: {
-            type: 'CHURCH',
-            church: {
-              id: church.id,
-              name: church.church_name,
-              email: church.church_email,
-              city: church.church_city,
-              domain: church.church_domain,
-            },
-          },
-          authorization: {
-            type: 'Bearer',
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            expires_in: 3600,
-          },
-        };
-      }
-    }
-
-    // If neither works, throw error
-    console.log(`[Login Failed] No valid credentials for: ${email}`);
-    throw new UnauthorizedException('Invalid email or password');
+      authorization: {
+        type: 'Bearer',
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: 3600,
+      },
+    };
   }
 
   // update user
@@ -715,8 +649,8 @@ export class AuthService {
       church_domain,
       church_password,
       church_adminname,
-      status,
-      auth_type,
+      status = 'PENDING',
+      auth_type = 'CHURCH_ADMIN',
     } = createChurchDto;
 
     // Check if church email already exists
@@ -737,28 +671,107 @@ export class AuthService {
       throw new ConflictException('Church name already exists');
     }
 
-    const church = await this.userRepository.createChurch({
-      church_name,
-      church_city,
-      church_email,
-      church_domain,
-      church_password,
-      church_adminname,
-      status,
-      auth_type,
+    // Check if user with same email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: church_email },
     });
 
-    if (!church || church.success === false) {
-      throw new BadRequestException('Failed to create church');
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
     }
 
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(church_password, 10);
+
+    // Create Church and Church Admin User in a transaction
+    const result = await this.prisma.$transaction(async (prisma) => {
+      // Step 1: Create the church
+      const church = await prisma.church.create({
+        data: {
+          church_name,
+          church_city,
+          church_email,
+          church_domain,
+          church_adminname,
+          status: status as any,
+          auth_type: auth_type as any,
+          church_members: 0,
+        },
+      });
+
+      // Step 2: Create the church admin user
+      const churchAdminUser = await prisma.user.create({
+        data: {
+          first_name: church_adminname.split(' ')[0] || church_adminname,
+          last_name: church_adminname.split(' ')[1] || '',
+          email: church_email,
+          password: hashedPassword,
+          phone_number: '',
+          church_name: church_name,
+          language: 'en',
+          type: UserType.CHURCH_ADMIN,
+          status: 1,
+          church_id: church.id,
+          email_verified_at: new Date(), // Auto-verify or set to null for email verification
+        },
+      });
+
+      // Step 3: Get or create the CHURCH_ADMIN role
+      let churchAdminRole = await prisma.role.findFirst({
+        where: { name: Role.CHURCH_ADMIN },
+      });
+
+      if (!churchAdminRole) {
+        churchAdminRole = await prisma.role.create({
+          data: {
+            name: Role.CHURCH_ADMIN,
+            title: 'Church Admin',
+            description:
+              'Church administrator with full control over church management',
+            status: 1,
+            color: '#FF8C00',
+          },
+        });
+      }
+
+      // Step 4: Assign the CHURCH_ADMIN role to the user
+      await prisma.roleUser.create({
+        data: {
+          role_id: churchAdminRole.id,
+          user_id: churchAdminUser.id,
+          churchId: church.id,
+        },
+      });
+
+      // Step 5: Update church member count
+      await prisma.church.update({
+        where: { id: church.id },
+        data: { church_members: 1 },
+      });
+
+      return { church, churchAdminUser };
+    });
+
+    // Return response without sensitive data
     return {
       success: true,
-      message: 'Church created successfully',
+      message:
+        'Church created successfully. Church admin user has been created.',
       data: {
-        church_id: church.data.id,
-        church_name: church.data.church_name,
-        church_email: church.data.church_email,
+        church: {
+          id: result.church.id,
+          name: result.church.church_name,
+          email: result.church.church_email,
+          domain: result.church.church_domain,
+          city: result.church.church_city,
+          status: result.church.status,
+        },
+        admin_user: {
+          id: result.churchAdminUser.id,
+          email: result.churchAdminUser.email,
+          name: `${result.churchAdminUser.first_name} ${result.churchAdminUser.last_name}`,
+          type: result.churchAdminUser.type,
+        },
       },
     };
   }

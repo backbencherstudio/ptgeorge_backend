@@ -23,7 +23,7 @@ import { ProUserService } from './memeber-request.service';
 import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 @ApiTags('Member Requests')
-@ApiBearerAuth(SWAGGER_AUTH.CHURCH_MAIN_ADMIN)
+@ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
 @Controller('pro-users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProUserController {
@@ -31,7 +31,7 @@ export class ProUserController {
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CHURCH_ADMIN)
-  @ApiOperation({ summary: 'Get all PRO_USERs with pending status' })
+  @ApiOperation({ summary: 'Get all PRO_USERs with pending status' }) 
   async getAllProUsers(@Query() query: GetProUsersDto) {
     return this.proUserService.getAllProUsers(query);
   }

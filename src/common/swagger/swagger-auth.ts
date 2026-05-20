@@ -6,7 +6,6 @@ export const SWAGGER_AUTH = {
   SUPER_ADMIN: 'super_admin-token',
   ADMIN: 'admin-token',
   CHURCH_ADMIN: 'church_admin-token',
-  CHURCH_MAIN_ADMIN: 'church_main_admin-token',
   CHURCH_LEADER: 'church_leader-token',
   PASTOR: 'pastor-token',
   ASSISTANT_PASTOR: 'assistant_pastor-token',
@@ -24,7 +23,6 @@ export const roleToAuthKey: Record<Role, SwaggerAuthValue> = {
   [Role.SUPER_ADMIN]: SWAGGER_AUTH.SUPER_ADMIN,
   [Role.ADMIN]: SWAGGER_AUTH.ADMIN,
   [Role.CHURCH_ADMIN]: SWAGGER_AUTH.CHURCH_ADMIN,
-  [Role.CHURCH_MAIN_ADMIN]: SWAGGER_AUTH.CHURCH_MAIN_ADMIN,
   [Role.CHURCH_LEADER]: SWAGGER_AUTH.CHURCH_LEADER,
   [Role.PASTOR]: SWAGGER_AUTH.PASTOR,
   [Role.ASSISTANT_PASTOR]: SWAGGER_AUTH.ASSISTANT_PASTOR,
@@ -113,7 +111,6 @@ export const swaggerUiOptions = {
               SUPER_ADMIN: 'super_admin-token',
               ADMIN: 'admin-token',
               CHURCH_ADMIN: 'church_admin-token',
-              CHURCH_MAIN_ADMIN: 'church_main_admin-token',
               CHURCH_LEADER: 'church_leader-token',
               PASTOR: 'pastor-token',
               ASSISTANT_PASTOR: 'assistant_pastor-token',
@@ -223,16 +220,10 @@ export const TEST_CREDENTIALS = {
     authKey: SWAGGER_AUTH.ADMIN,
   },
   'Church Admin (Grace)': {
-    email: 'churchadmin@gracechurch.org',
+    email: 'admin@gracechurch.org',
     password: 'Password@123',
     role: Role.CHURCH_ADMIN,
     authKey: SWAGGER_AUTH.CHURCH_ADMIN,
-  },
-  'Church Main Admin (Grace)': {
-    email: 'admin@gracechurch.org',
-    password: 'Password@123',
-    role: Role.CHURCH_MAIN_ADMIN,
-    authKey: SWAGGER_AUTH.CHURCH_MAIN_ADMIN,
   },
   'Pastor (Grace)': {
     email: 'pastor@gracechurch.org',
@@ -241,7 +232,7 @@ export const TEST_CREDENTIALS = {
     authKey: SWAGGER_AUTH.PASTOR,
   },
   'Assistant Pastor (Grace)': {
-    email: 'assistant-pastor@gracechurch.org',
+    email: 'assistant_pastor@gracechurch.org',
     password: 'Password@123',
     role: Role.ASSISTANT_PASTOR,
     authKey: SWAGGER_AUTH.ASSISTANT_PASTOR,
@@ -282,11 +273,11 @@ export const TEST_CREDENTIALS = {
     role: Role.USER,
     authKey: SWAGGER_AUTH.USER,
   },
-  'Church Main Admin (Faith)': {
+  'Church Admin (Faith)': {
     email: 'admin@faithassembly.org',
     password: 'Password@123',
-    role: Role.CHURCH_MAIN_ADMIN,
-    authKey: SWAGGER_AUTH.CHURCH_MAIN_ADMIN,
+    role: Role.CHURCH_ADMIN,
+    authKey: SWAGGER_AUTH.CHURCH_ADMIN,
   },
   'Pastor (Faith)': {
     email: 'pastor@faithassembly.org',

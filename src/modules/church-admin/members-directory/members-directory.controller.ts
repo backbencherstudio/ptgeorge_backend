@@ -28,7 +28,7 @@ import { ChurchMembersService } from './members-directory.service';
 import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 @ApiTags('Church Members')
-@ApiBearerAuth(SWAGGER_AUTH.CHURCH_MAIN_ADMIN)
+@ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
 @Controller('church/members')
 @UseGuards(JwtAuthGuard)
 export class ChurchMembersController {

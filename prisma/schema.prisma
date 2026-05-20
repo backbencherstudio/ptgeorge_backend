@@ -74,6 +74,11 @@ model User {
   business_portfolio String? @db.Text
   description        String? @db.Text
 
+
+  // fcm token for push notifications 
+  google_id     String? @unique 
+  apple_id     String? @unique
+
   // other info
   avatar   String?
   about_me String?
@@ -174,6 +179,10 @@ model Church {
   church_domain    String @db.VarChar(255)
   church_password  String @db.VarChar(255)
   church_adminname String @db.VarChar(255)
+
+  // fcm token for push notifications 
+  google_id     String? @unique 
+  apple_id     String? @unique
 
   church_members Int? @default(0)
 

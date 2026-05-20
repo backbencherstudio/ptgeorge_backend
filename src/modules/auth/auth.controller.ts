@@ -87,81 +87,78 @@ export class AuthController {
 
   // User registration endpoint
   @Post('register')
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Register a new user',
-    description: `Creates a new standard USER account.
+    description: `Creates a new user account. Supports both regular users and professional users.
 
-Validation Rules:
-- Email must be unique and valid format
-- Password must be at least 8 characters
-- Phone number must be unique
-- All required fields must be provided`,
+**Account Types:**
+- **USER**: Looking for services (church members, regular users)
+- **PRO_USER**: Offering services (professionals, freelancers, business owners)
+
+**Professional fields are required for PRO_USER accounts only.**
+
+After registration:
+1. Account status will be 'pending'
+2. Admin approval required
+3. Email verification required before login`,
   })
   @ApiBody({
     type: CreateUserDto,
     description: 'User registration data',
     examples: {
-      user: {
-        summary: 'User Registration',
+      regular_user: {
+        summary: '📋 Regular User (Looking for services)',
+        description: 'For users who want to find church services',
         value: {
-          first_name: 'John',
-          last_name: 'Doe',
-          phone_number: '+880123456789',
-          church_name: 'Grace Community Church',
-          language: 'en',
-          email: 'john@example.com',
-          password: 'password123',
+          first_name: 'Jessica',
+          last_name: 'Martinez',
+          phone_number: '+16485550234',
+          church_id: 'church_123',
+          language: 'English',
+          email: 'jessica.m@gmail.com',
+          password: 'Password@123',
+          confirm_password: 'Password@123',
+          type: 'USER',
+          agree_to_terms: true,
+        },
+      },
+      professional_user: {
+        summary: '💼 Professional User (Offering services)',
+        description: 'For professionals, freelancers, or business owners',
+        value: {
+          first_name: 'Jessica',
+          last_name: 'Martinez',
+          phone_number: '+16485550234',
+          church_id: 'church_123',
+          language: 'English',
+          email: 'jessica.m@gmail.com',
+          password: 'Password@123',
+          confirm_password: 'Password@123',
+          type: 'PRO_USER',
+          agree_to_terms: true,
+          company_name: 'Little Angels Childcare',
+          business_email: 'info@littleangelscare.com',
+          business_phone: '+16485550300',
+          service: 'Childcare Services',
+          category: 'Childcare',
+          profession: 'Licensed Childcare Provider',
+          website: 'www.littleangelscare.com',
+          whatsapp_number: '+16485550301',
+          available_time: 'Monday to Friday, 8 AM to 6 PM',
+          address_line1: '456 Park Avenue, New York, NY 10022',
+          state: 'New York',
+          country: 'USA',
+          zip_code: '10022',
+          description:
+            'Experienced childcare provider with 10+ years serving church families.',
+          other_locations: 'Brooklyn, NY; Queens, NY',
         },
       },
     },
   })
-  @ApiResponse({
-    status: 201,
-    description: 'User registered successfully',
-    schema: {
-      example: {
-        success: true,
-        message: 'User registered successfully',
-        data: { userId: 1 },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad request - Email already registered or validation failed',
-  })
-  @ApiResponse({
-    status: 500,
-    description: 'Internal server error',
-  })
-  async create(@Body() data: CreateUserDto) {
-    try {
-      const response = await this.authService.register({
-        first_name: data.first_name,
-        last_name: data.last_name,
-        phone_number: data.phone_number,
-        church_name: data.church_name,
-        language: data.language,
-        email: data.email,
-        password: data.password,
-        type: data.type,
-      });
-
-      return response;
-    } catch (error: any) {
-      // Handle specific error types
-      if (error.code === 'P2002') {
-        return {
-          success: false,
-          message: 'Email already registered',
-        };
-      }
-
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+  async register(@Body() createUserDto: CreateUserDto) {
+    return this.authService.register(createUserDto);
   }
 
   // User login endpoint

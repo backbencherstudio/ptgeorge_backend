@@ -38,12 +38,19 @@ enum UserType {
   PRO_USER
 }
 
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
 model User {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now())
   deleted_at DateTime?
-  status     Int?      @default(1) @db.SmallInt
+  status     UserStatus? @default(PENDING)
 
   first_name   String @db.VarChar(255)
   last_name    String @db.VarChar(255)
@@ -125,6 +132,7 @@ model User {
   roles_assigned_to_me     RoleUser[]                @relation("UserRoles")
   roles_i_assigned         RoleUser[]                @relation("RoleAssignment")
   userNotificationSettings UserNotificationSetting[]
+  church_memberships ChurchMember[]
 
   @@map("users")
 }
@@ -190,8 +198,51 @@ model Church {
   // relations
   users     User[]
   roleUsers RoleUser[]
+  members ChurchMember[]
 
   @@map("churches")
+}
+
+model ChurchMember {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  church_id   String
+  church      Church   @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  // Role within the church (separate from system roles)
+  church_role  String?  @db.VarChar(100) // e.g., "Helper", "Member", "Leader", "Pastor"
+  
+  // Status within the church
+  status       ChurchMemberStatus @default(ACTIVE)
+  
+  // When they joined the church
+  joined_at    DateTime @default(now())
+  
+  // Who approved them
+  approved_by  String?
+  approved_at  DateTime?
+  
+  // Additional metadata
+  notes        String?  @db.Text
+  
+  @@unique([church_id, user_id])
+  @@index([church_id])
+  @@index([user_id])
+  @@index([status])
+  @@map("church_members")
+}
+
+enum ChurchMemberStatus {
+  PENDING   // Waiting for approval
+  ACTIVE    // Active member
+  INACTIVE  // Inactive member
+  REMOVED   // Removed from church
 }
 
 /**

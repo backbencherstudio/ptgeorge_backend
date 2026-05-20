@@ -1,4 +1,3 @@
-// src/modules/church-members/church-members.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -10,6 +9,8 @@ import * as bcrypt from 'bcrypt';
 import { GetMembersDto } from './dto/get-members.dto';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
+import { UserStatus, ChurchMemberStatus } from 'prisma/generated/enums';
+import { Role } from 'src/common/guard/role/role.enum';
 
 @Injectable()
 export class ChurchMembersService {
@@ -42,7 +43,7 @@ export class ChurchMembersService {
     const { page, limit, search, status, role, sortBy, sortOrder } = query;
     const skip = (page - 1) * limit;
 
-    // Build where clause
+    // Build where clause for church members
     const where: any = {
       church_id: admin.church_id,
       deleted_at: null,
@@ -50,7 +51,8 @@ export class ChurchMembersService {
 
     // Filter by status
     if (status) {
-      where.status = status === 'active' ? 1 : 0;
+      where.status =
+        status === 'active' ? UserStatus.ACTIVE : UserStatus.SUSPENDED;
     }
 
     // Search by name or email
@@ -71,13 +73,13 @@ export class ChurchMembersService {
       };
     }
 
-    // Get members with their roles
+    // Get members with their roles and church membership
     const [members, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy: { [sortBy || 'created_at']: sortOrder || 'desc' },
         include: {
           roles_assigned_to_me: {
             include: {
@@ -93,26 +95,36 @@ export class ChurchMembersService {
             },
             where: { churchId: admin.church_id },
           },
+          church_memberships: {
+            where: { church_id: admin.church_id },
+            take: 1,
+          },
         },
       }),
       this.prisma.user.count({ where }),
     ]);
 
     // Format members data
-    const formattedMembers = members.map((member) => ({
-      id: member.id,
-      name: `${member.first_name} ${member.last_name}`,
-      first_name: member.first_name,
-      last_name: member.last_name,
-      email: member.email,
-      phone: member.phone_number,
-      status: member.status === 1 ? 'Active' : 'Inactive',
-      joined: member.created_at,
-      role: member.roles_assigned_to_me[0]?.role?.title || 'No Role',
-      role_name: member.roles_assigned_to_me[0]?.role?.name || null,
-      assigned_by: member.roles_assigned_to_me[0]?.assigned_by || null,
-      type: member.type,
-    }));
+    const formattedMembers = members.map((member) => {
+      const membership = member.church_memberships[0];
+      return {
+        id: member.id,
+        name: `${member.first_name} ${member.last_name}`,
+        first_name: member.first_name,
+        last_name: member.last_name,
+        email: member.email,
+        phone: member.phone_number,
+        status: member.status,
+        joined: member.created_at,
+        church_member_status: membership?.status || 'PENDING',
+        church_role: membership?.church_role || null,
+        joined_at: membership?.joined_at || member.created_at,
+        role: member.roles_assigned_to_me[0]?.role?.title || 'No Role',
+        role_name: member.roles_assigned_to_me[0]?.role?.name || null,
+        assigned_by: member.roles_assigned_to_me[0]?.assigned_by || null,
+        type: member.type,
+      };
+    });
 
     return {
       success: true,
@@ -137,7 +149,8 @@ export class ChurchMembersService {
     const where: any = { deleted_at: null };
 
     if (status) {
-      where.status = status === 'active' ? 1 : 0;
+      where.status =
+        status === 'active' ? UserStatus.ACTIVE : UserStatus.SUSPENDED;
     }
 
     if (search) {
@@ -161,11 +174,15 @@ export class ChurchMembersService {
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy: { [sortBy || 'created_at']: sortOrder || 'desc' },
         include: {
           church: { select: { church_name: true, id: true } },
           roles_assigned_to_me: {
             include: { role: true },
+            take: 1,
+          },
+          church_memberships: {
+            include: { church: true },
             take: 1,
           },
         },
@@ -173,21 +190,27 @@ export class ChurchMembersService {
       this.prisma.user.count({ where }),
     ]);
 
-    const formattedMembers = members.map((member) => ({
-      id: member.id,
-      name: `${member.first_name} ${member.last_name}`,
-      first_name: member.first_name,
-      last_name: member.last_name,
-      email: member.email,
-      phone: member.phone_number,
-      status: member.status === 1 ? 'Active' : 'Inactive',
-      joined: member.created_at,
-      church: member.church?.church_name || 'No Church',
-      church_id: member.church?.id,
-      role: member.roles_assigned_to_me[0]?.role?.title || 'No Role',
-      role_name: member.roles_assigned_to_me[0]?.role?.name || null,
-      type: member.type,
-    }));
+    const formattedMembers = members.map((member) => {
+      const membership = member.church_memberships[0];
+      return {
+        id: member.id,
+        name: `${member.first_name} ${member.last_name}`,
+        first_name: member.first_name,
+        last_name: member.last_name,
+        email: member.email,
+        phone: member.phone_number,
+        status: member.status,
+        joined: member.created_at,
+        church: member.church?.church_name || 'No Church',
+        church_id: member.church?.id,
+        church_member_status: membership?.status || 'NOT_A_MEMBER',
+        church_role: membership?.church_role || null,
+        joined_at: membership?.joined_at || null,
+        role: member.roles_assigned_to_me[0]?.role?.title || 'No Role',
+        role_name: member.roles_assigned_to_me[0]?.role?.name || null,
+        type: member.type,
+      };
+    });
 
     return {
       success: true,
@@ -203,7 +226,7 @@ export class ChurchMembersService {
   }
 
   /**
-   * Add a new member to the church
+   * Add a new member to the church (with church membership)
    */
   async addMember(adminId: string, dto: CreateMemberDto) {
     // Get admin's church
@@ -216,13 +239,24 @@ export class ChurchMembersService {
       throw new NotFoundException('Admin not found');
     }
 
-    // Super admin can add to any church, but need to specify church_id in dto
-    if (admin.type === 'SUPER_ADMIN') {
-      throw new BadRequestException('Super admin must specify church_id');
+    if (!admin.church_id && admin.type !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('You are not associated with any church');
     }
 
-    if (!admin.church_id) {
-      throw new ForbiddenException('You are not associated with any church');
+    const churchId =
+      admin.type === 'SUPER_ADMIN' ? dto.church_id : admin.church_id;
+
+    if (!churchId) {
+      throw new BadRequestException('Church ID is required');
+    }
+
+    // Verify church exists
+    const church = await this.prisma.church.findUnique({
+      where: { id: churchId, deleted_at: null },
+    });
+
+    if (!church) {
+      throw new NotFoundException('Church not found');
     }
 
     // Check if user already exists
@@ -230,84 +264,162 @@ export class ChurchMembersService {
       where: { email: dto.email },
     });
 
-    if (existingUser) {
-      throw new BadRequestException('User with this email already exists');
-    }
+    let userId: string;
 
-    // Get the role to assign
-    const role = await this.prisma.role.findFirst({
-      where: { name: dto.role_name, deleted_at: null },
-    });
+    // Use transaction for all operations
+    const result = await this.prisma.$transaction(async (tx) => {
+      let user;
 
-    if (!role) {
-      throw new BadRequestException(`Role "${dto.role_name}" not found`);
-    }
+      if (existingUser) {
+        // User exists, check if already a member of this church
+        const existingMembership = await tx.churchMember.findFirst({
+          where: {
+            church_id: churchId,
+            user_id: existingUser.id,
+            deleted_at: null,
+          },
+        });
 
-    // Check if admin can assign this role
-    const canAssign = await this.canAssignRole(adminId, role.id);
-    if (!canAssign) {
-      throw new ForbiddenException(
-        `You cannot assign the role "${dto.role_name}"`,
-      );
-    }
+        if (
+          existingMembership &&
+          existingMembership.status === ChurchMemberStatus.ACTIVE
+        ) {
+          throw new BadRequestException(
+            'User is already a member of this church',
+          );
+        }
 
-    // Generate password if not provided
-    const password = dto.password || this.generateRandomPassword();
-    const hashedPassword = await bcrypt.hash(password, 10);
+        userId = existingUser.id;
 
-    // Get church details
-    const church = await this.prisma.church.findUnique({
-      where: { id: admin.church_id },
-    });
+        // Update existing membership or create new one
+        if (existingMembership) {
+          await tx.churchMember.update({
+            where: { id: existingMembership.id },
+            data: {
+              status: ChurchMemberStatus.ACTIVE,
+              church_role: dto.church_role || 'Member',
+              updated_at: new Date(),
+              approved_by: adminId,
+              approved_at: new Date(),
+            },
+          });
+        } else {
+          await tx.churchMember.create({
+            data: {
+              church_id: churchId,
+              user_id: existingUser.id,
+              church_role: dto.church_role || 'Member',
+              status: ChurchMemberStatus.ACTIVE,
+              joined_at: new Date(),
+              approved_by: adminId,
+              approved_at: new Date(),
+            },
+          });
+        }
 
-    // Create user
-    const user = await this.prisma.user.create({
-      data: {
-        first_name: dto.first_name,
-        last_name: dto.last_name,
-        email: dto.email,
-        phone_number: dto.phone_number,
-        church_name: church?.church_name || '',
-        language: 'en',
-        password: hashedPassword,
-        type: 'USER',
-        status: 1,
-        church_id: admin.church_id,
-        email_verified_at: new Date(),
-      },
-    });
+        user = existingUser;
+      } else {
+        // Create new user
+        const password = dto.password || this.generateRandomPassword();
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Assign role to user
-    await this.prisma.roleUser.create({
-      data: {
-        role_id: role.id,
-        user_id: user.id,
-        assigned_by_id: adminId,
-        churchId: admin.church_id,
-      },
-    });
+        user = await tx.user.create({
+          data: {
+            first_name: dto.first_name,
+            last_name: dto.last_name,
+            email: dto.email,
+            phone_number: dto.phone_number,
+            church_name: church.church_name,
+            language: dto.language || 'en',
+            password: hashedPassword,
+            type: 'USER',
+            status: UserStatus.ACTIVE,
+            church_id: churchId,
+            email_verified_at: new Date(),
+          },
+        });
 
-    // Update church member count
-    const memberCount = await this.prisma.user.count({
-      where: { church_id: admin.church_id, deleted_at: null },
-    });
-    await this.prisma.church.update({
-      where: { id: admin.church_id },
-      data: { church_members: memberCount },
+        // Create church membership
+        await tx.churchMember.create({
+          data: {
+            church_id: churchId,
+            user_id: user.id,
+            church_role: dto.church_role || 'Member',
+            status: ChurchMemberStatus.ACTIVE,
+            joined_at: new Date(),
+            approved_by: adminId,
+            approved_at: new Date(),
+          },
+        });
+      }
+
+      // Get or create the role
+      const roleName =
+        dto.role_name === 'helper'
+          ? Role.HELPER
+          : dto.role_name === 'member'
+            ? Role.CHURCH_MEMBER
+            : dto.role_name;
+
+      let role = await tx.role.findFirst({
+        where: { name: roleName, deleted_at: null },
+      });
+
+      if (!role) {
+        throw new BadRequestException(`Role "${dto.role_name}" not found`);
+      }
+
+      // Check if admin can assign this role
+      const canAssign = await this.canAssignRole(adminId, role.id);
+      if (!canAssign && admin.type !== 'SUPER_ADMIN') {
+        throw new ForbiddenException(
+          `You cannot assign the role "${dto.role_name}"`,
+        );
+      }
+
+      // Assign role to user
+      await tx.roleUser.create({
+        data: {
+          role_id: role.id,
+          user_id: user.id,
+          assigned_by_id: adminId,
+          churchId: churchId,
+        },
+      });
+
+      // Update church member count
+      const memberCount = await tx.churchMember.count({
+        where: {
+          church_id: churchId,
+          status: ChurchMemberStatus.ACTIVE,
+          deleted_at: null,
+        },
+      });
+
+      await tx.church.update({
+        where: { id: churchId },
+        data: { church_members: memberCount },
+      });
+
+      return { user, password: dto.password };
     });
 
     return {
       success: true,
-      message: 'Member added successfully',
+      message: existingUser
+        ? 'Member added to church successfully'
+        : 'Member created and added to church successfully',
       data: {
-        id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        email: user.email,
-        phone: user.phone_number,
-        role: role.title,
-        role_name: role.name,
-        temporary_password: dto.password ? undefined : password,
+        id: result.user.id,
+        first_name: result.user.first_name,
+        last_name: result.user.last_name,
+        email: result.user.email,
+        phone: result.user.phone_number,
+        church_id: churchId,
+        church_name: church.church_name,
+        role: dto.role_name,
+        church_role: dto.church_role || 'Member',
+        temporary_password: result.password,
       },
     };
   }
@@ -329,7 +441,7 @@ export class ChurchMembersService {
     // Get the member
     const member = await this.prisma.user.findUnique({
       where: { id: memberId, deleted_at: null },
-      include: { roles_assigned_to_me: true },
+      include: { church_memberships: true },
     });
 
     if (!member) {
@@ -339,12 +451,23 @@ export class ChurchMembersService {
     // Super admin can edit anyone
     if (admin.type !== 'SUPER_ADMIN') {
       // Check if member belongs to admin's church
-      if (member.church_id !== admin.church_id) {
+      const membership = member.church_memberships.find(
+        (cm) =>
+          cm.church_id === admin.church_id &&
+          cm.status === ChurchMemberStatus.ACTIVE,
+      );
+
+      if (!membership) {
         throw new ForbiddenException(
           'You cannot edit members from other churches',
         );
       }
     }
+
+    const churchId =
+      admin.type === 'SUPER_ADMIN' && dto.church_id
+        ? dto.church_id
+        : admin.church_id;
 
     // Update member data
     const updateData: any = {};
@@ -353,7 +476,8 @@ export class ChurchMembersService {
     if (dto.email) updateData.email = dto.email;
     if (dto.phone_number) updateData.phone_number = dto.phone_number;
     if (dto.status) {
-      updateData.status = dto.status === 'active' ? 1 : 0;
+      updateData.status =
+        dto.status === 'active' ? UserStatus.ACTIVE : UserStatus.SUSPENDED;
     }
 
     const updatedMember = await this.prisma.user.update({
@@ -361,8 +485,22 @@ export class ChurchMembersService {
       data: updateData,
     });
 
+    // Update church membership if church_role provided
+    if (dto.church_role && churchId) {
+      await this.prisma.churchMember.updateMany({
+        where: {
+          user_id: memberId,
+          church_id: churchId,
+        },
+        data: {
+          church_role: dto.church_role,
+          updated_at: new Date(),
+        },
+      });
+    }
+
     // Update role if provided
-    if (dto.role_name) {
+    if (dto.role_name && churchId) {
       const newRole = await this.prisma.role.findFirst({
         where: { name: dto.role_name, deleted_at: null },
       });
@@ -373,7 +511,7 @@ export class ChurchMembersService {
 
       // Check if admin can assign this role
       const canAssign = await this.canAssignRole(adminId, newRole.id);
-      if (!canAssign) {
+      if (!canAssign && admin.type !== 'SUPER_ADMIN') {
         throw new ForbiddenException(
           `You cannot assign the role "${dto.role_name}"`,
         );
@@ -383,7 +521,7 @@ export class ChurchMembersService {
       await this.prisma.roleUser.deleteMany({
         where: {
           user_id: memberId,
-          churchId: admin.church_id,
+          churchId: churchId,
         },
       });
 
@@ -393,7 +531,7 @@ export class ChurchMembersService {
           role_id: newRole.id,
           user_id: memberId,
           assigned_by_id: adminId,
-          churchId: admin.church_id,
+          churchId: churchId,
         },
       });
     }
@@ -406,7 +544,7 @@ export class ChurchMembersService {
   }
 
   /**
-   * Remove a member from church (soft delete)
+   * Remove a member from church (soft delete membership)
    */
   async removeMember(adminId: string, memberId: string) {
     // Get admin's church
@@ -431,38 +569,67 @@ export class ChurchMembersService {
     // Super admin can remove anyone
     if (admin.type !== 'SUPER_ADMIN') {
       // Check if member belongs to admin's church
-      if (member.church_id !== admin.church_id) {
+      const membership = await this.prisma.churchMember.findFirst({
+        where: {
+          user_id: memberId,
+          church_id: admin.church_id,
+          status: ChurchMemberStatus.ACTIVE,
+        },
+      });
+
+      if (!membership) {
         throw new ForbiddenException(
           'You cannot remove members from other churches',
         );
       }
     }
 
-    // Soft delete user
-    await this.prisma.user.update({
-      where: { id: memberId },
-      data: { deleted_at: new Date(), status: 0 },
+    const churchId =
+      admin.type === 'SUPER_ADMIN' ? member.church_id : admin.church_id;
+
+    // Soft delete membership
+    await this.prisma.churchMember.updateMany({
+      where: {
+        user_id: memberId,
+        church_id: churchId,
+      },
+      data: {
+        status: ChurchMemberStatus.REMOVED,
+        deleted_at: new Date(),
+      },
     });
 
-    // Update church member count if member had a church
-    if (member.church_id) {
-      const memberCount = await this.prisma.user.count({
-        where: { church_id: member.church_id, deleted_at: null },
+    // Remove role assignment for this church
+    await this.prisma.roleUser.deleteMany({
+      where: {
+        user_id: memberId,
+        churchId: churchId,
+      },
+    });
+
+    // Update church member count
+    if (churchId) {
+      const memberCount = await this.prisma.churchMember.count({
+        where: {
+          church_id: churchId,
+          status: ChurchMemberStatus.ACTIVE,
+          deleted_at: null,
+        },
       });
       await this.prisma.church.update({
-        where: { id: member.church_id },
+        where: { id: churchId },
         data: { church_members: memberCount },
       });
     }
 
     return {
       success: true,
-      message: 'Member removed successfully',
+      message: 'Member removed from church successfully',
     };
   }
 
   /**
-   * Get member by ID
+   * Get member by ID with church membership details
    */
   async getMemberById(adminId: string, memberId: string) {
     // Get admin's church
@@ -475,7 +642,7 @@ export class ChurchMembersService {
       throw new NotFoundException('Admin not found');
     }
 
-    // Get the member
+    // Get the member with church memberships
     const member = await this.prisma.user.findFirst({
       where: {
         id: memberId,
@@ -496,6 +663,11 @@ export class ChurchMembersService {
           },
         },
         church: { select: { church_name: true, id: true } },
+        church_memberships: {
+          include: {
+            church: true,
+          },
+        },
       },
     });
 
@@ -506,7 +678,13 @@ export class ChurchMembersService {
     // Super admin can view anyone
     if (admin.type !== 'SUPER_ADMIN') {
       // Check if member belongs to admin's church
-      if (member.church_id !== admin.church_id) {
+      const belongsToChurch = member.church_memberships.some(
+        (cm) =>
+          cm.church_id === admin.church_id &&
+          cm.status === ChurchMemberStatus.ACTIVE,
+      );
+
+      if (!belongsToChurch) {
         throw new ForbiddenException(
           'You cannot view members from other churches',
         );
@@ -514,6 +692,9 @@ export class ChurchMembersService {
     }
 
     const currentRole = member.roles_assigned_to_me[0];
+    const activeMembership = member.church_memberships.find(
+      (cm) => cm.status === ChurchMemberStatus.ACTIVE,
+    );
 
     return {
       success: true,
@@ -522,9 +703,10 @@ export class ChurchMembersService {
         id: member.id,
         first_name: member.first_name,
         last_name: member.last_name,
+        full_name: `${member.first_name} ${member.last_name}`,
         email: member.email,
         phone: member.phone_number,
-        status: member.status === 1 ? 'Active' : 'Inactive',
+        status: member.status,
         joined: member.created_at,
         church: member.church?.church_name,
         church_id: member.church_id,
@@ -532,6 +714,27 @@ export class ChurchMembersService {
         role_name: currentRole?.role?.name || null,
         assigned_by: currentRole?.assigned_by || null,
         type: member.type,
+        church_membership: activeMembership
+          ? {
+              id: activeMembership.id,
+              status: activeMembership.status,
+              church_role: activeMembership.church_role,
+              joined_at: activeMembership.joined_at,
+              approved_by: activeMembership.approved_by,
+              approved_at: activeMembership.approved_at,
+            }
+          : null,
+        professional_info:
+          member.type === 'PRO_USER'
+            ? {
+                company_name: member.company_name,
+                business_email: member.business_email,
+                business_phone: member.business_phone,
+                service: member.service,
+                category: member.category,
+                profession: member.profession,
+              }
+            : null,
       },
     };
   }

@@ -1,5 +1,5 @@
 // prisma/seed.ts
-import { PrismaClient } from '../prisma/generated/client';
+import { PrismaClient, UserStatus } from '../prisma/generated/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -73,8 +73,8 @@ const rolesData = [
     color: '#98D8C8',
   },
   {
-    title: 'Verified Pro',
-    name: Role.VERIFIED_PRO,
+    title: 'Pro User',
+    name: Role.PRO_USER,
     description: 'Verified professional members',
     color: '#F7B731',
   },
@@ -271,7 +271,7 @@ const rolePermissionsMap: Record<string, string[]> = {
   ],
   [Role.HELPER]: ['view_church_members', 'view_content'],
   [Role.CHURCH_MEMBER]: ['view_content'],
-  [Role.VERIFIED_PRO]: ['view_content'],
+  [Role.PRO_USER]: ['view_content'],
   [Role.USER]: ['view_content'],
 };
 
@@ -285,7 +285,7 @@ const roleAssignmentRules = [
   { from_role: Role.SUPER_ADMIN, to_role: Role.BACKGROUND_CHECKER },
   { from_role: Role.SUPER_ADMIN, to_role: Role.HELPER },
   { from_role: Role.SUPER_ADMIN, to_role: Role.CHURCH_MEMBER },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.VERIFIED_PRO },
+  { from_role: Role.SUPER_ADMIN, to_role: Role.PRO_USER },
   { from_role: Role.SUPER_ADMIN, to_role: Role.USER },
   { from_role: Role.ADMIN, to_role: Role.CHURCH_ADMIN },
   { from_role: Role.ADMIN, to_role: Role.PASTOR },
@@ -297,7 +297,7 @@ const roleAssignmentRules = [
   { from_role: Role.CHURCH_ADMIN, to_role: Role.BACKGROUND_CHECKER },
   { from_role: Role.CHURCH_ADMIN, to_role: Role.HELPER },
   { from_role: Role.CHURCH_ADMIN, to_role: Role.CHURCH_MEMBER },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.VERIFIED_PRO },
+  { from_role: Role.CHURCH_ADMIN, to_role: Role.PRO_USER },
   { from_role: Role.CHURCH_ADMIN, to_role: Role.USER },
   { from_role: Role.CHURCH_LEADER, to_role: Role.HELPER },
   { from_role: Role.CHURCH_LEADER, to_role: Role.CHURCH_MEMBER },
@@ -348,7 +348,7 @@ async function main() {
       church_name: 'System Administration',
       language: 'en',
       type: 'SUPER_ADMIN' as const,
-      status: 1,
+      status: UserStatus.ACTIVE,
     };
 
     let superadmin = await prisma.user.findUnique({
@@ -358,7 +358,6 @@ async function main() {
     if (!superadmin) {
       superadmin = await prisma.user.create({
         data: {
-          id: randomUUID(),
           ...superadminData,
           email_verified_at: new Date(),
         },
@@ -553,7 +552,7 @@ async function main() {
               church_name: churchData.name,
               language: 'en',
               type: 'CHURCH_ADMIN',
-              status: 1,
+              status: UserStatus.ACTIVE,
               church_id: newChurch.id,
               email_verified_at: new Date(),
             },
@@ -647,7 +646,7 @@ async function main() {
           last_name: 'Wilson',
           email: 'pro@gracechurch.org',
           phone: '+1 212 555 0007',
-          role: Role.VERIFIED_PRO,
+          role: Role.PRO_USER,
           type: 'PRO_USER' as const,
         },
         {
@@ -721,7 +720,7 @@ async function main() {
               church_name: churchName,
               language: 'en',
               type: userData.type,
-              status: 1,
+              status: UserStatus.ACTIVE,
               church_id: church.id,
               email_verified_at: new Date(),
             },

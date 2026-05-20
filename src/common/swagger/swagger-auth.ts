@@ -12,7 +12,7 @@ export const SWAGGER_AUTH = {
   BACKGROUND_CHECKER: 'background_checker-token',
   HELPER: 'helper-token',
   CHURCH_MEMBER: 'church_member-token',
-  VERIFIED_PRO: 'verified_pro-token',
+  PRO_USER: 'pro_user-token',
   USER: 'user-token',
 } as const;
 
@@ -29,7 +29,7 @@ export const roleToAuthKey: Record<Role, SwaggerAuthValue> = {
   [Role.BACKGROUND_CHECKER]: SWAGGER_AUTH.BACKGROUND_CHECKER,
   [Role.HELPER]: SWAGGER_AUTH.HELPER,
   [Role.CHURCH_MEMBER]: SWAGGER_AUTH.CHURCH_MEMBER,
-  [Role.VERIFIED_PRO]: SWAGGER_AUTH.VERIFIED_PRO,
+  [Role.PRO_USER]: SWAGGER_AUTH.PRO_USER,
   [Role.USER]: SWAGGER_AUTH.USER,
 };
 
@@ -117,7 +117,7 @@ export const swaggerUiOptions = {
               BACKGROUND_CHECKER: 'background_checker-token',
               HELPER: 'helper-token',
               CHURCH_MEMBER: 'church_member-token',
-              VERIFIED_PRO: 'verified_pro-token',
+              PRO_USER: 'pro_user-token',
               USER: 'user-token',
             };
 
@@ -261,11 +261,11 @@ export const TEST_CREDENTIALS = {
     role: Role.CHURCH_MEMBER,
     authKey: SWAGGER_AUTH.CHURCH_MEMBER,
   },
-  'Verified Pro (Grace)': {
+  'Pro User (Grace)': {
     email: 'pro@gracechurch.org',
     password: 'Password@123',
-    role: Role.VERIFIED_PRO,
-    authKey: SWAGGER_AUTH.VERIFIED_PRO,
+    role: Role.PRO_USER,
+    authKey: SWAGGER_AUTH.PRO_USER,
   },
   'Regular User (Grace)': {
     email: 'user@gracechurch.org',

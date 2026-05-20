@@ -1,4 +1,4 @@
-// dto/create-user.dto.ts (updated with better Swagger docs)
+// dto/create-user.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
@@ -6,14 +6,17 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsPhoneNumber,
+  IsUrl,
   MinLength,
   ValidateIf,
 } from 'class-validator';
 import { UserType } from 'prisma/generated/enums';
 
 export class CreateUserDto {
+  // ==================== PERSONAL INFORMATION ====================
   @ApiProperty({
-    example: 'John',
+    example: 'Jessica',
     description: 'First name of the user',
     required: true,
   })
@@ -22,7 +25,7 @@ export class CreateUserDto {
   first_name: string;
 
   @ApiProperty({
-    example: 'Doe',
+    example: 'Martinez',
     description: 'Last name of the user',
     required: true,
   })
@@ -31,140 +34,197 @@ export class CreateUserDto {
   last_name: string;
 
   @ApiProperty({
-    example: '+880123456789',
+    example: '+16485550234',
     description: 'Phone number with country code',
     required: true,
   })
+  // @IsPhoneNumber()
   @IsString()
   @IsNotEmpty()
   phone_number: string;
 
   @ApiProperty({
-    example: 'Grace Community Church',
-    description: 'Name of the church',
+    example: 'church_123',
+    description: 'Church ID from church selection dropdown',
     required: true,
   })
   @IsString()
   @IsNotEmpty()
-  church_name: string;
+  church_id: string;
 
   @ApiProperty({
-    example: 'en',
-    description: 'Preferred language (en, bn, etc.)',
+    example: 'English',
+    description: 'Preferred service language',
     required: true,
   })
   @IsString()
   @IsNotEmpty()
   language: string;
 
-  // Professional setup fields (ONLY FOR PRO_USER)
+  @ApiProperty({
+    example: 'jessica.m@gmail.com',
+    description: 'User email address (must be unique)',
+    required: true,
+  })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+
+  @ApiProperty({
+    example: 'Password@123',
+    description: 'User password (minimum 8 characters)',
+    required: true,
+    minLength: 8,
+  })
+  @MinLength(8, { message: 'Password should be minimum 8 characters' })
+  @IsNotEmpty()
+  password: string;
+
+  @ApiProperty({
+    example: 'Password@123',
+    description: 'Confirm password (must match password)',
+    required: true,
+    minLength: 8,
+  })
+  @MinLength(8)
+  @IsNotEmpty()
+  confirm_password: string;
+
+  @ApiProperty({
+    enum: UserType,
+    default: UserType.USER,
+    description:
+      'Account type: USER (looking for services) or PRO_USER (offering services)',
+    example: UserType.USER,
+    required: true,
+  })
+  @IsEnum(UserType)
+  @IsNotEmpty()
+  type: UserType;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'Agree to terms and conditions, privacy policy, and community guidelines',
+    required: true,
+  })
+  @IsNotEmpty()
+  agree_to_terms: boolean;
+
+  // ==================== PROFESSIONAL SETUP (PRO_USER ONLY) ====================
   @ApiPropertyOptional({
-    example: 'Tech Solutions Ltd',
+    example: 'Little Angels Childcare',
     description: 'Company name (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  company_name: string;
+  @IsNotEmpty({ message: 'Company name is required for professional account' })
+  company_name?: string;
 
   @ApiPropertyOptional({
-    example: 'business@techsolutions.com',
+    example: 'info@littleangelscare.com',
     description: 'Business email (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsEmail()
-  @IsNotEmpty()
-  business_email: string;
+  @IsNotEmpty({
+    message: 'Business email is required for professional account',
+  })
+  business_email?: string;
 
   @ApiPropertyOptional({
-    example: '+880555123456',
+    example: '+16485550300',
     description: 'Business phone number (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
-  @IsString()
-  @IsNotEmpty()
-  business_phone: string;
+  @IsPhoneNumber()
+  @IsNotEmpty({
+    message: 'Business phone number is required for professional account',
+  })
+  business_phone?: string;
 
   @ApiPropertyOptional({
-    example: 'Software Development',
-    description: 'Type of service (required for PRO_USER)',
+    example: 'Childcare Services',
+    description: 'Type of service offered (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  service: string;
+  @IsNotEmpty({ message: 'Service type is required for professional account' })
+  service?: string;
 
   @ApiPropertyOptional({
-    example: 'Technology',
+    example: 'Childcare',
     description: 'Business category (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  category: string;
+  @IsNotEmpty({ message: 'Category is required for professional account' })
+  category?: string;
 
   @ApiPropertyOptional({
-    example: 'Full Stack Developer',
+    example: 'Licensed Childcare Provider',
     description: 'Profession (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  profession: string;
+  @IsNotEmpty({ message: 'Profession is required for professional account' })
+  profession?: string;
 
   @ApiPropertyOptional({
-    example: 'https://techsolutions.com',
-    description: 'Company website (required for PRO_USER)',
+    example: 'www.littleangelscare.com',
+    description: 'Company website URL (optional for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
-  @IsString()
-  @IsNotEmpty()
-  website: string;
+  @IsOptional()
+  @IsUrl()
+  website?: string;
 
   @ApiPropertyOptional({
-    example: '+880555123456',
-    description: 'WhatsApp number (required for PRO_USER)',
+    example: '+16485550301',
+    description: 'WhatsApp number (optional for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
-  @IsString()
-  @IsNotEmpty()
-  whatsapp_number: string;
+  @IsOptional()
+  @IsPhoneNumber()
+  whatsapp_number?: string;
 
   @ApiPropertyOptional({
-    example: '9:00 AM - 6:00 PM',
+    example: 'Monday to Friday, 8 AM to 6 PM',
     description: 'Available time (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  available_time: string;
+  @IsNotEmpty({
+    message: 'Available time is required for professional account',
+  })
+  available_time?: string;
 
   @ApiPropertyOptional({
-    example: '123 Business Street',
-    description: 'Address line 1 (required for PRO_USER)',
+    example: '456 Park Avenue, New York, NY 10022',
+    description: 'Business address line 1 (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  address_line1: string;
+  @IsNotEmpty({ message: 'Address is required for professional account' })
+  address_line1?: string;
 
   @ApiPropertyOptional({
     example: 'Suite 100',
-    description: 'Address line 2 (optional, but required for PRO_USER)',
+    description: 'Business address line 2 (optional for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  address_line2: string;
+  address_line2?: string;
 
   @ApiPropertyOptional({
-    example: 'California',
-    description: 'State (required for PRO_USER)',
+    example: 'New York',
+    description: 'State/Province/Region (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  state: string;
+  @IsNotEmpty({ message: 'State is required for professional account' })
+  state?: string;
 
   @ApiPropertyOptional({
     example: 'USA',
@@ -172,81 +232,61 @@ export class CreateUserDto {
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  country: string;
+  @IsNotEmpty({ message: 'Country is required for professional account' })
+  country?: string;
 
   @ApiPropertyOptional({
-    example: '90210',
+    example: '10022',
     description: 'ZIP/Postal code (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  zip_code: string;
+  @IsNotEmpty({ message: 'ZIP code is required for professional account' })
+  zip_code?: string;
 
   @ApiPropertyOptional({
-    example: 'https://portfolio.com/johndoe',
-    description: 'Business portfolio URL (required for PRO_USER)',
-  })
-  @ValidateIf((o) => o.type === UserType.PRO_USER)
-  @IsString()
-  @IsNotEmpty()
-  business_portfolio: string;
-
-  @ApiPropertyOptional({
-    example: 'Leading tech solutions provider with 10+ years of experience',
+    example:
+      'Experienced childcare provider with 10+ years serving church families',
     description: 'Business description (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsString()
-  @IsNotEmpty()
-  description: string;
-
-  // Email, password and type
-  @ApiProperty({
-    example: 'john@example.com',
-    description: 'User email address (must be unique)',
-    required: true,
-  })
-  @IsEmail()
-  email: string;
-
-  @ApiProperty({
-    example: 'password123',
-    description: 'User password (minimum 8 characters)',
-    required: true,
-    minLength: 8,
-  })
-  @MinLength(8, { message: 'Password should be minimum 8 characters' })
-  password: string;
+  @IsNotEmpty({ message: 'Description is required for professional account' })
+  description?: string;
 
   @ApiPropertyOptional({
-    enum: UserType,
-    default: UserType.USER,
-    description: 'User type: USER, PRO_USER, CHURCH_ADMIN, or ADMIN',
-    example: 'USER',
+    example: 'Brooklyn, NY; Queens, NY',
+    description: 'Other service locations (optional for PRO_USER)',
   })
+  @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsOptional()
-  @IsEnum(UserType)
-  type?: UserType;
+  @IsString()
+  other_locations?: string;
 }
 
+// ==================== LOGIN DTOS ====================
 export class LoginDto {
   @ApiProperty({
     example: 'admin@gracechurch.org',
     description: 'Email address',
+    required: true,
   })
   @IsEmail()
+  @IsNotEmpty()
   email: string;
 
-  @ApiProperty({ example: 'Password@123', description: 'Password' })
+  @ApiProperty({
+    example: 'Password@123',
+    description: 'Password',
+    required: true,
+  })
   @IsString()
+  @IsNotEmpty()
   password: string;
 
-  @ApiProperty({
-    required: false,
+  @ApiPropertyOptional({
     example: '123456',
-    description: '2FA token if enabled',
+    description: '2FA token if enabled on the account',
   })
   @IsOptional()
   @IsString()
@@ -256,17 +296,23 @@ export class LoginDto {
 export class UnifiedLoginDto {
   @ApiProperty({
     example: 'admin@gracechurch.org',
-    description: 'Email address (user or church email)',
+    description: 'Email address (same email works for both user and church)',
+    required: true,
   })
   @IsEmail()
+  @IsNotEmpty()
   email: string;
 
-  @ApiProperty({ example: 'Password@123', description: 'Password' })
+  @ApiProperty({
+    example: 'Password@123',
+    description: 'Password (users and church admins use the same password)',
+    required: true,
+  })
   @IsString()
+  @IsNotEmpty()
   password: string;
 
-  @ApiProperty({
-    required: false,
+  @ApiPropertyOptional({
     example: '123456',
     description: '2FA token if enabled',
   })

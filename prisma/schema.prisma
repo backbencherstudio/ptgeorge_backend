@@ -84,6 +84,7 @@ model User {
 
 
   // fcm token for push notifications 
+  fcm_token     String?
   google_id     String? @unique 
   apple_id     String? @unique
 

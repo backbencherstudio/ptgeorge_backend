@@ -18,8 +18,10 @@ import {
 } from './common/swagger/swagger-auth';
 import { NextFunction, Request, Response } from 'express';
 import { helmetConfig } from './common/config/helmet.cofig';
+import initializeFirebase from './config/firebase.config';
 
 async function bootstrap() {
+  initializeFirebase();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });

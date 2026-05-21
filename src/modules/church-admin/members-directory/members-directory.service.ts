@@ -201,7 +201,7 @@ export class ChurchMembersService {
         phone: member.phone_number,
         status: member.status,
         joined: member.created_at,
-        church: member.church?.church_name || 'No Church',
+        church: member.chur.?.church_name || 'No Church',
         church_id: member.church?.id,
         church_member_status: membership?.status || 'NOT_A_MEMBER',
         church_role: membership?.church_role || null,
@@ -634,9 +634,14 @@ export class ChurchMembersService {
   async getMemberById(adminId: string, memberId: string) {
     // Get admin's church
     const admin = await this.prisma.user.findUnique({
-      where: { id: adminId },
-      select: { church_id: true, type: true },
-    });
+  where: { id: adminId },
+  include: {
+    church_memberships: {
+      where: { status: ChurchMemberStatus.ACTIVE },
+      take: 1,
+    },
+  },
+});
 
     if (!admin) {
       throw new NotFoundException('Admin not found');

@@ -11,7 +11,12 @@ import {
   UserAccountType,
 } from './dto/get-pro-users.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { PermissionAction, UserStatus, UserType } from 'prisma/generated/enums';
+import {
+  PermissionAction,
+  UserStatus,
+  UserType,
+  ChurchMemberStatus,
+} from 'prisma/generated/enums';
 import { Role } from 'src/common/guard/role/role.enum';
 
 @Injectable()
@@ -180,13 +185,24 @@ export class ProUserService {
             role: true,
           },
         },
-        church: true,
+        church_memberships: {
+          include: {
+            church: true,
+          },
+          where: {
+            status: ChurchMemberStatus.ACTIVE,
+          },
+          take: 1,
+        },
       },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    // Get the active church membership
+    const activeMembership = user.church_memberships[0];
 
     // Check if user has helper or member role
     const hasHelperOrMemberRole = user.roles_assigned_to_me.some(
@@ -252,12 +268,12 @@ export class ProUserService {
               business_portfolio: user.business_portfolio,
             }
           : null,
-      church_info: user.church
+      church_info: activeMembership?.church
         ? {
-            id: user.church.id,
-            name: user.church.church_name,
-            city: user.church.church_city,
-            status: user.church.status,
+            id: activeMembership.church.id,
+            name: activeMembership.church.church_name,
+            city: activeMembership.church.church_city,
+            status: activeMembership.church.status,
           }
         : null,
     };
@@ -270,7 +286,7 @@ export class ProUserService {
   ) {
     const { approvalType } = approveUserDto;
 
-    // Check if user exists
+    // Check if user exists with their church memberships
     const user = await this.prisma.user.findFirst({
       where: {
         id: userId,
@@ -282,7 +298,11 @@ export class ProUserService {
             role: true,
           },
         },
-        church_memberships: true, // Include existing memberships
+        church_memberships: {
+          include: {
+            church: true,
+          },
+        },
       },
     });
 
@@ -290,10 +310,17 @@ export class ProUserService {
       throw new NotFoundException('User not found');
     }
 
-    // Check if user has a church
-    if (!user.church_id) {
+    // Get the active church membership
+    const activeMembership = user.church_memberships.find(
+      (cm) => cm.status === ChurchMemberStatus.ACTIVE,
+    );
+
+    // Check if user has a church membership
+    if (!activeMembership) {
       throw new BadRequestException('User is not associated with any church');
     }
+
+    const churchId = activeMembership.church_id;
 
     // Check if user already has helper or member role
     const existingRole = user.roles_assigned_to_me.find(
@@ -304,17 +331,6 @@ export class ProUserService {
     if (existingRole) {
       throw new BadRequestException(
         `User already has ${existingRole.role.name} role`,
-      );
-    }
-
-    // Check if user is already a church member
-    const existingMembership = user.church_memberships.find(
-      (cm) => cm.church_id === user.church_id && cm.status === 'ACTIVE',
-    );
-
-    if (existingMembership) {
-      throw new BadRequestException(
-        'User is already an active member of this church',
       );
     }
 
@@ -360,45 +376,20 @@ export class ProUserService {
           role_id: role.id,
           user_id: user.id,
           assigned_by_id: adminId,
-          churchId: user.church_id,
+          churchId: churchId,
         },
       });
 
-      // 2. Create or update church membership
-      const existingMembershipRecord = await tx.churchMember.findFirst({
-        where: {
-          church_id: user.church_id,
-          user_id: user.id,
+      // 2. Update church membership
+      const churchMember = await tx.churchMember.update({
+        where: { id: activeMembership.id },
+        data: {
+          church_role: roleName === Role.HELPER ? 'Helper' : 'Member',
+          approved_by: adminId,
+          approved_at: new Date(),
+          updated_at: new Date(),
         },
       });
-
-      let churchMember;
-      if (existingMembershipRecord) {
-        // Update existing membership
-        churchMember = await tx.churchMember.update({
-          where: { id: existingMembershipRecord.id },
-          data: {
-            status: 'ACTIVE',
-            church_role: roleName === Role.HELPER ? 'Helper' : 'Member',
-            approved_by: adminId,
-            approved_at: new Date(),
-            updated_at: new Date(),
-          },
-        });
-      } else {
-        // Create new membership
-        churchMember = await tx.churchMember.create({
-          data: {
-            church_id: user.church_id,
-            user_id: user.id,
-            church_role: roleName === Role.HELPER ? 'Helper' : 'Member',
-            status: 'ACTIVE',
-            joined_at: new Date(),
-            approved_by: adminId,
-            approved_at: new Date(),
-          },
-        });
-      }
 
       // 3. Update user status from PENDING to ACTIVE
       await tx.user.update({
@@ -409,14 +400,14 @@ export class ProUserService {
       // 4. Update church member count
       const memberCount = await tx.churchMember.count({
         where: {
-          church_id: user.church_id,
-          status: 'ACTIVE',
+          church_id: churchId,
+          status: ChurchMemberStatus.ACTIVE,
           deleted_at: null,
         },
       });
 
       await tx.church.update({
-        where: { id: user.church_id },
+        where: { id: churchId },
         data: { church_members: memberCount },
       });
 
@@ -436,7 +427,6 @@ export class ProUserService {
         email: true,
         type: true,
         status: true,
-        church_id: true,
       },
     });
 

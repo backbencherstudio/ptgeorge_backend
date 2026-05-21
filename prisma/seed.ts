@@ -1,5 +1,9 @@
 // prisma/seed.ts
-import { PrismaClient, UserStatus } from '../prisma/generated/client';
+import {
+  PrismaClient,
+  UserStatus,
+  ChurchMemberStatus,
+} from '../prisma/generated/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -553,8 +557,20 @@ async function main() {
               language: 'en',
               type: 'CHURCH_ADMIN',
               status: UserStatus.ACTIVE,
-              church_id: newChurch.id,
               email_verified_at: new Date(),
+            },
+          });
+
+          // Create church membership for admin user
+          const churchMember = await tx.churchMember.create({
+            data: {
+              church_id: newChurch.id,
+              user_id: adminUser.id,
+              church_role: 'Church Admin',
+              status: ChurchMemberStatus.ACTIVE,
+              joined_at: new Date(),
+              approved_by: superadmin.id,
+              approved_at: new Date(),
             },
           });
 
@@ -574,7 +590,7 @@ async function main() {
             data: { church_members: 1 },
           });
 
-          return { church: newChurch, adminUser };
+          return { church: newChurch, adminUser, churchMember };
         });
 
         church = result.church;
@@ -600,6 +616,7 @@ async function main() {
           phone: '+1 212 555 0002',
           role: Role.PASTOR,
           type: 'USER' as const,
+          church_role: 'Pastor',
         },
         {
           first_name: 'Rev. Sarah',
@@ -608,6 +625,7 @@ async function main() {
           phone: '+1 212 555 0003',
           role: Role.ASSISTANT_PASTOR,
           type: 'USER' as const,
+          church_role: 'Assistant Pastor',
         },
         {
           first_name: 'Michael',
@@ -616,6 +634,7 @@ async function main() {
           phone: '+1 212 555 0110',
           role: Role.CHURCH_LEADER,
           type: 'USER' as const,
+          church_role: 'Church Leader',
         },
         {
           first_name: 'Robert',
@@ -624,6 +643,7 @@ async function main() {
           phone: '+1 212 555 0004',
           role: Role.BACKGROUND_CHECKER,
           type: 'USER' as const,
+          church_role: 'Background Checker',
         },
         {
           first_name: 'David',
@@ -632,6 +652,7 @@ async function main() {
           phone: '+1 212 555 0005',
           role: Role.HELPER,
           type: 'USER' as const,
+          church_role: 'Helper',
         },
         {
           first_name: 'Emily',
@@ -640,6 +661,7 @@ async function main() {
           phone: '+1 212 555 0006',
           role: Role.CHURCH_MEMBER,
           type: 'USER' as const,
+          church_role: 'Member',
         },
         {
           first_name: 'James',
@@ -648,6 +670,7 @@ async function main() {
           phone: '+1 212 555 0007',
           role: Role.PRO_USER,
           type: 'PRO_USER' as const,
+          church_role: 'Pro User',
         },
         {
           first_name: 'Regular',
@@ -656,6 +679,7 @@ async function main() {
           phone: '+1 212 555 0008',
           role: Role.USER,
           type: 'USER' as const,
+          church_role: 'Regular User',
         },
       ],
       'Faith Assembly Church': [
@@ -666,6 +690,7 @@ async function main() {
           phone: '+1 310 555 0002',
           role: Role.PASTOR,
           type: 'USER' as const,
+          church_role: 'Pastor',
         },
         {
           first_name: 'Lisa',
@@ -674,6 +699,7 @@ async function main() {
           phone: '+1 310 555 0003',
           role: Role.HELPER,
           type: 'USER' as const,
+          church_role: 'Helper',
         },
         {
           first_name: 'Mark',
@@ -682,6 +708,7 @@ async function main() {
           phone: '+1 310 555 0004',
           role: Role.CHURCH_MEMBER,
           type: 'USER' as const,
+          church_role: 'Member',
         },
       ],
     };
@@ -721,7 +748,6 @@ async function main() {
               language: 'en',
               type: userData.type,
               status: UserStatus.ACTIVE,
-              church_id: church.id,
               email_verified_at: new Date(),
             },
           });
@@ -734,6 +760,32 @@ async function main() {
           );
         }
 
+        // Create church membership
+        const existingMembership = await prisma.churchMember.findFirst({
+          where: {
+            church_id: church.id,
+            user_id: user.id,
+          },
+        });
+
+        if (!existingMembership) {
+          await prisma.churchMember.create({
+            data: {
+              church_id: church.id,
+              user_id: user.id,
+              church_role: userData.church_role,
+              status: ChurchMemberStatus.ACTIVE,
+              joined_at: new Date(),
+              approved_by: superadmin?.id,
+              approved_at: new Date(),
+            },
+          });
+          console.log(`  ✅ Church membership created`);
+        } else {
+          console.log(`  ✅ Church membership already exists`);
+        }
+
+        // Assign role
         const existingAssignment = await prisma.roleUser.findUnique({
           where: {
             role_id_user_id: {
@@ -760,14 +812,20 @@ async function main() {
     }
 
     // Step 8: Update church member counts
+    console.log('\n📝 Step 8: Updating church member counts...');
     for (const [churchName, church] of createdChurches) {
-      const memberCount = await prisma.user.count({
-        where: { church_id: church.id, deleted_at: null },
+      const memberCount = await prisma.churchMember.count({
+        where: {
+          church_id: church.id,
+          status: ChurchMemberStatus.ACTIVE,
+          deleted_at: null,
+        },
       });
       await prisma.church.update({
         where: { id: church.id },
         data: { church_members: memberCount },
       });
+      console.log(`  ✅ ${churchName}: ${memberCount} members`);
     }
 
     // Step 9: Display Summary
@@ -782,6 +840,9 @@ async function main() {
 
     const totalUsers = await prisma.user.count();
     console.log(`✅ Total users: ${totalUsers}`);
+
+    const totalMemberships = await prisma.churchMember.count();
+    console.log(`✅ Church memberships: ${totalMemberships}`);
 
     const totalRoleAssignments = await prisma.roleUser.count();
     console.log(`✅ Role assignments: ${totalRoleAssignments}`);

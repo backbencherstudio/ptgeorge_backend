@@ -32,7 +32,7 @@ import { Roles } from 'src/common/guard/role/roles.decorator';
 import { Role } from 'src/common/guard/role/role.enum';
 import { ChurchMembersService } from './members-directory.service';
 
-@ApiTags('Church Members')
+@ApiTags('Members Directory')
 @ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
 @Controller('church/members')
 @UseGuards(JwtAuthGuard, RolesGuard)

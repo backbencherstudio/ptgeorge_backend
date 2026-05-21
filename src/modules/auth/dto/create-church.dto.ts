@@ -11,56 +11,51 @@ import {
 import { ChurchAuthType, ChurchStatus } from 'prisma/generated/client';
 
 export class CreateChurchDto {
-  @ApiProperty({ example: 'Grace Church' })
-  @IsString()
+  @ApiProperty({ example: 'Grace Community Church' })
   @IsNotEmpty()
+  @IsString()
   church_name: string;
 
-  @ApiProperty({ example: 'Dhaka' })
-  @IsString()
+  @ApiProperty({ example: 'New York' })
   @IsNotEmpty()
+  @IsString()
   church_city: string;
 
-  @ApiProperty({ example: 'church@example.com' })
+  @ApiProperty({ example: 'admin@gracechurch.org' })
+  @IsNotEmpty()
   @IsEmail()
   church_email: string;
 
-  @ApiProperty({ example: 'gracechurch.com' })
-  @IsString()
+  @ApiProperty({ example: 'gracechurch.org' })
   @IsNotEmpty()
-  @Matches(
-    /^(?!:\/\/)([a-zA-Z0-9-_]+\.)+[a-zA-Z]{2,}$/,
-    { message: 'Invalid domain format' },
-  )
+  @IsString()
   church_domain: string;
 
-  @ApiProperty({ example: 'StrongPass123' })
-  @IsString()
-  @MinLength(8, { message: 'Password must be at least 8 characters' })
+  @ApiProperty({ example: 'Password@123' })
+  @IsNotEmpty()
+  @MinLength(8)
   church_password: string;
 
-  @ApiPropertyOptional({ example: 'John Admin' })
+  @ApiProperty({ example: 'John Smith' })
+  @IsNotEmpty()
+  @IsString()
+  church_adminname: string;
+
+  @ApiProperty({
+    required: false,
+    enum: ['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED'],
+    default: 'PENDING',
+  })
   @IsOptional()
   @IsString()
-  church_adminname?: string;
+  status?: string;
 
-  // --------------------------
-  // ENUM FIELDS (IMPORTANT)
-  // --------------------------
-
-  @ApiPropertyOptional({
-    enum: ChurchStatus,
-    default: ChurchStatus.PENDING,
+  @ApiProperty({
+    required: false,
+    enum: ['SYSTEM_ADMIN', 'EDITOR', 'HELPER', 'CHURCH_ADMIN'],
+    default: 'CHURCH_ADMIN',
   })
   @IsOptional()
-  @IsEnum(ChurchStatus)
-  status?: ChurchStatus;
-
-  @ApiPropertyOptional({
-    enum: ChurchAuthType,
-    default: ChurchAuthType.CHURCH_ADMIN,
-  })
-  @IsOptional()
-  @IsEnum(ChurchAuthType)
-  auth_type?: ChurchAuthType;
+  @IsString()
+  auth_type?: string;
 }

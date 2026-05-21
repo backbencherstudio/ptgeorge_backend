@@ -21,11 +21,12 @@ import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { verifyPassword } from 'src/common/utils/password.util';
-import { ChurchStatus } from 'prisma/generated/enums';
+import { ChurchStatus, UserStatus, UserType } from 'prisma/generated/enums';
 import { CreateChurchDto } from './dto/create-church.dto';
 import { ChurchLoginDto } from './dto/login-church.dto';
 import * as bcrypt from 'bcrypt';
-import { UnifiedLoginDto } from './dto/create-user.dto';
+import { CreateUserDto, UnifiedLoginDto } from './dto/create-user.dto';
+import { Role } from 'src/common/guard/role/role.enum';
 
 @Injectable()
 export class AuthService {
@@ -87,101 +88,218 @@ export class AuthService {
     }
   }
   // done
-  async register({
-    first_name,
-    last_name,
-    phone_number,
-    church_name,
-    language,
-    email,
-    password,
-    type,
-  }: {
-    first_name: string;
-    last_name: string;
-    phone_number: string;
-    church_name: string;
-    language: string;
-    email: string;
-    password: string;
-    type?: string;
-  }) {
+  async register(createUserDto: CreateUserDto) {
+    const {
+      first_name,
+      last_name,
+      phone_number,
+      church_id,
+      language,
+      email,
+      password,
+      confirm_password,
+      type,
+      agree_to_terms,
+      // Professional fields
+      company_name,
+      business_email,
+      business_phone,
+      service,
+      category,
+      profession,
+      website,
+      whatsapp_number,
+      available_time,
+      address_line1,
+      address_line2,
+      state,
+      country,
+      zip_code,
+      description,
+      other_locations,
+    } = createUserDto;
+
+    // 1. Validate passwords match
+    if (password !== confirm_password) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    // 2. Validate terms agreement
+    if (!agree_to_terms) {
+      throw new BadRequestException(
+        'You must agree to the terms and conditions, privacy policy, and community guidelines',
+      );
+    }
+
+    // 3. Check if email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('Email already registered');
+    }
+
+    // 4. Check if phone number already exists
+    const existingPhone = await this.prisma.user.findFirst({
+      where: { phone_number },
+    });
+
+    if (existingPhone) {
+      throw new ConflictException('Phone number already registered');
+    }
+
+    // 5. Validate that the church exists in the platform
+    const existingChurch = await this.prisma.church.findFirst({
+      where: {
+        id: church_id,
+        status: ChurchStatus.ACTIVE,
+        deleted_at: null,
+      },
+    });
+
+    if (!existingChurch) {
+      throw new BadRequestException(
+        'Invalid or inactive church selected. Please select a valid church from our platform.',
+      );
+    }
+
+    if (!existingChurch) {
+      throw new BadRequestException(
+        `Church "${existingChurch.church_name}" not found or is not active. Please select a valid church from our platform.`,
+      );
+    }
+
+    // 6. For PRO_USER, validate professional fields
+    if (type === UserType.PRO_USER) {
+      const requiredFields = [
+        { field: company_name, name: 'company_name' },
+        { field: business_email, name: 'business_email' },
+        { field: business_phone, name: 'business_phone' },
+        { field: service, name: 'service' },
+        { field: category, name: 'category' },
+        { field: profession, name: 'profession' },
+        { field: available_time, name: 'available_time' },
+        { field: address_line1, name: 'address_line1' },
+        { field: state, name: 'state' },
+        { field: country, name: 'country' },
+        { field: zip_code, name: 'zip_code' },
+        { field: description, name: 'description' },
+      ];
+
+      const missingFields = requiredFields.filter((f) => !f.field);
+      if (missingFields.length > 0) {
+        throw new BadRequestException(
+          `Missing required professional fields: ${missingFields.map((f) => f.name).join(', ')}`,
+        );
+      }
+
+      // Check if business email already exists
+      const existingBusinessEmail = await this.prisma.user.findFirst({
+        where: { business_email },
+      });
+
+      if (existingBusinessEmail) {
+        throw new ConflictException('Business email already registered');
+      }
+    }
+
+    // 7. Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 8. Create user with transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Create the user with the church_id from the existing church
+      const user = await tx.user.create({
+        data: {
+          first_name,
+          last_name,
+          phone_number,
+          church_name: existingChurch.church_name, // Use the exact church name from DB
+          language,
+          email,
+          password: hashedPassword,
+          type: type || UserType.USER,
+          status: UserStatus.PENDING,
+          email_verified_at: null,
+          church_id: existingChurch.id, // Link user to the church
+          // Professional fields (only for PRO_USER)
+          ...(type === UserType.PRO_USER && {
+            company_name,
+            business_email,
+            business_phone,
+            service,
+            category,
+            profession,
+            website: website || null,
+            whatsapp_number: whatsapp_number || null,
+            available_time,
+            address_line1,
+            address_line2: address_line2 || null,
+            state,
+            country,
+            zip_code,
+            description,
+          }),
+        },
+      });
+
+      // Create OTP for email verification
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await tx.ucode.create({
+        data: {
+          user_id: user.id,
+          token: otpCode,
+          email: email,
+          expired_at: expiresAt,
+        },
+      });
+
+      // Update church member count
+      await tx.church.update({
+        where: { id: existingChurch.id },
+        data: { church_members: { increment: 1 } },
+      });
+
+      return { user, otpCode, church: existingChurch };
+    });
+
+    // 9. Send OTP email
     try {
-      // Check if email already exist
-      const userEmailExist = await this.userRepository.exist({
-        field: 'email',
-        value: String(email),
-      });
-
-      if (userEmailExist) {
-        return {
-          statusCode: 401,
-          message: 'Email already exist',
-        };
-      }
-
-      const user = await this.userRepository.createUser({
-        first_name: first_name,
-        last_name: last_name,
-        phone_number: phone_number,
-        church_name: church_name,
-        language: language,
-        email: email,
-        password: password,
-        type: type,
-      });
-
-      if (user == null && user.success == false) {
-        return {
-          success: false,
-          message: 'Failed to create account',
-        };
-      }
-
-      // create stripe customer account
-      // const stripeCustomer = await StripePayment.createCustomer({
-      //   user_id: user.data.id,
-      //   email: email,
-      //   name: `${first_name} ${last_name}`,
-      // });
-
-      // if (stripeCustomer) {
-      //   await this.prisma.user.update({
-      //     where: {
-      //       id: user.data.id,
-      //     },
-      //     data: {
-      //       billing_id: stripeCustomer.id,
-      //     },
-      //   });
-      // }
-
-      // ----------------------------------------------------
-      // create otp code
-      const token = await this.ucodeRepository.createToken({
-        userId: user.data.id,
-        isOtp: true,
-        time: 2,
-      });
-
-      // send otp code to email
       await this.mailService.sendOtpCodeToEmail({
         email: email,
         name: `${first_name} ${last_name}`,
-        otp: token,
+        otp: result.otpCode,
       });
-
-      return {
-        success: true,
-        message: 'We have sent an OTP code to your email',
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
+    } catch (emailError) {
+      console.error('Failed to send OTP email:', emailError);
     }
+
+    // 10. Return response
+    return {
+      success: true,
+      message:
+        type === UserType.PRO_USER
+          ? 'Professional account created successfully. Please verify your email and wait for admin approval.'
+          : 'Account created successfully. Please verify your email and wait for admin approval.',
+      data: {
+        user_id: result.user.id,
+        email: result.user.email,
+        type: result.user.type,
+        status: result.user.status,
+        church: {
+          id: result.church.id,
+          name: result.church.church_name,
+          city: result.church.church_city,
+        },
+        requires_approval: true,
+        requires_email_verification: true,
+      },
+    };
   }
+
   // done
   // In your auth.service.ts
   async unifiedLogin(loginDto: UnifiedLoginDto) {
@@ -189,7 +307,7 @@ export class AuthService {
 
     console.log(`[Login Attempt] Email: ${email}`);
 
-    // FIRST: Try to find as user (since we want user login for role assignment)
+    // Find user by email
     const user = await this.prisma.user.findUnique({
       where: { email },
       include: {
@@ -198,153 +316,124 @@ export class AuthService {
           where: { churchId: { not: null } },
           take: 1,
         },
+        church: true, // Include church data for church admins
       },
     });
 
-    // If user exists, try user login first
-    if (user) {
-      console.log(`[User Found] Attempting user login...`);
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
 
-      // Check password
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (isPasswordValid) {
-        // Check email verification
-        if (!user.email_verified_at) {
-          throw new UnauthorizedException('Please verify your email first');
-        }
+    console.log(`[User Found] Attempting login...`);
 
-        // Check if user is active
-        if (user.status !== 1) {
-          throw new UnauthorizedException('Your account is inactive');
-        }
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
 
-        // Check 2FA if enabled
-        if (user.is_two_factor_enabled === 1) {
-          if (!token) {
-            throw new UnauthorizedException('2FA token required');
-          }
-        }
+    // Check email verification
+    if (!user.email_verified_at) {
+      throw new UnauthorizedException('Please verify your email first');
+    }
 
-        const currentRole = user.roles_assigned_to_me[0]?.role;
+    // Check if user is active
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Your account is inactive');
+    }
 
-        console.log(
-          `[User Login Success] ${user.email} as ${currentRole?.title || user.type}`,
-        );
+    // If user is CHURCH_ADMIN, check church status
+    if (user.type === 'CHURCH_ADMIN' && user.church) {
+      const churchStatus = user.church.status;
 
-        const payload = {
-          sub: user.id,
-          email: user.email,
-          userId: user.id,
-          type: user.type,
-          role: currentRole?.name || user.type.toLowerCase(),
-          church_id: user.church_id,
-        };
-
-        const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-        await this.redis.set(
-          `refresh_token:${user.id}`,
-          refreshToken,
-          'EX',
-          60 * 60 * 24 * 7,
-        );
-
-        return {
-          success: true,
-          message: 'Logged in successfully',
-          data: {
-            type: user.type,
-            role: currentRole?.title || user.type,
-            role_name: currentRole?.name || user.type.toLowerCase(),
-            user: {
-              id: user.id,
-              first_name: user.first_name,
-              last_name: user.last_name,
-              email: user.email,
-              church_id: user.church_id,
-            },
-          },
-          authorization: {
-            type: 'Bearer',
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            expires_in: 3600,
-          },
-        };
-      } else {
-        console.log(`[User Login] Password invalid for: ${email}`);
+      switch (churchStatus) {
+        case UserStatus.PENDING:
+          throw new UnauthorizedException(
+            'Your church registration is pending approval. Please wait for admin approval.',
+          );
+        case UserStatus.SUSPENDED:
+          throw new UnauthorizedException(
+            'Your church account has been suspended. Please contact support.',
+          );
+        case UserStatus.ACTIVE:
+          // Church is active, allow login
+          console.log(`[Church Status] Active - login allowed`);
+          break;
+        default:
+          throw new UnauthorizedException(
+            'Unable to login due to church account status issue.',
+          );
       }
     }
 
-    // If user login fails, try church login
-    const church = await this.prisma.church.findFirst({
-      where: {
-        OR: [{ church_email: email }, { church_domain: email }],
-        deleted_at: null,
+    // Check 2FA if enabled
+    if (user.is_two_factor_enabled === 1) {
+      if (!token) {
+        throw new UnauthorizedException('2FA token required');
+      }
+      // TODO: Verify 2FA token
+    }
+
+    const currentRole = user.roles_assigned_to_me[0]?.role;
+
+    console.log(
+      `[Login Success] ${user.email} as ${currentRole?.title || user.type}`,
+    );
+
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      userId: user.id,
+      type: user.type,
+      role: currentRole?.name || user.type.toLowerCase(),
+      church_id: user.church_id,
+      church_status: user.church?.status,
+    };
+
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    await this.redis.set(
+      `refresh_token:${user.id}`,
+      refreshToken,
+      'EX',
+      60 * 60 * 24 * 7,
+    );
+
+    // Prepare response data
+    const responseData: any = {
+      type: user.type,
+      role: currentRole?.title || user.type,
+      role_name: currentRole?.name || user.type.toLowerCase(),
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        church_id: user.church_id,
       },
-    });
+    };
 
-    if (church) {
-      console.log(`[Church Found] Attempting church login...`);
-
-      // Church login flow
-      const isPasswordMatched = await verifyPassword(
-        password,
-        church.church_password,
-      );
-
-      if (isPasswordMatched) {
-        if (church.status !== 'ACTIVE') {
-          throw new BadRequestException('Church account is not active');
-        }
-
-        const payload = {
-          sub: church.id,
-          church_id: church.id,
-          church_email: church.church_email,
-          auth_type: church.auth_type,
-          type: 'CHURCH',
-        };
-
-        const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-        await this.redis.set(
-          `refresh_token:church:${church.id}`,
-          refreshToken,
-          'EX',
-          60 * 60 * 24 * 7,
-        );
-
-        console.log(`[Church Login Success] ${church.church_email}`);
-
-        return {
-          success: true,
-          message: 'Church logged in successfully',
-          data: {
-            type: 'CHURCH',
-            church: {
-              id: church.id,
-              name: church.church_name,
-              email: church.church_email,
-              city: church.church_city,
-              domain: church.church_domain,
-            },
-          },
-          authorization: {
-            type: 'Bearer',
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            expires_in: 3600,
-          },
-        };
-      }
+    // Include church status in response for church admins
+    if (user.type === 'CHURCH_ADMIN' && user.church) {
+      responseData.church = {
+        id: user.church.id,
+        name: user.church.church_name,
+        status: user.church.status,
+      };
     }
 
-    // If neither works, throw error
-    console.log(`[Login Failed] No valid credentials for: ${email}`);
-    throw new UnauthorizedException('Invalid email or password');
+    return {
+      success: true,
+      message: 'Logged in successfully',
+      data: responseData,
+      authorization: {
+        type: 'Bearer',
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: 3600,
+      },
+    };
   }
 
   // update user
@@ -715,8 +804,8 @@ export class AuthService {
       church_domain,
       church_password,
       church_adminname,
-      status,
-      auth_type,
+      status = 'PENDING',
+      auth_type = 'CHURCH_ADMIN',
     } = createChurchDto;
 
     // Check if church email already exists
@@ -728,6 +817,15 @@ export class AuthService {
       throw new ConflictException('Church email already exists');
     }
 
+    // Check if church domain already exists
+    const churchDomainExist = await this.prisma.church.findFirst({
+      where: { church_domain },
+    });
+
+    if (churchDomainExist) {
+      throw new ConflictException('Church domain already exists');
+    }
+
     // Check if church name already exists
     const churchNameExist = await this.prisma.church.findFirst({
       where: { church_name },
@@ -737,28 +835,107 @@ export class AuthService {
       throw new ConflictException('Church name already exists');
     }
 
-    const church = await this.userRepository.createChurch({
-      church_name,
-      church_city,
-      church_email,
-      church_domain,
-      church_password,
-      church_adminname,
-      status,
-      auth_type,
+    // Check if user with same email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: church_email },
     });
 
-    if (!church || church.success === false) {
-      throw new BadRequestException('Failed to create church');
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
     }
 
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(church_password, 10);
+
+    // Create Church and Church Admin User in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Step 1: Create the church (ID auto-generated by Prisma)
+      const church = await tx.church.create({
+        data: {
+          church_name,
+          church_city,
+          church_email,
+          church_domain,
+          church_adminname,
+          status: status as any,
+          auth_type: auth_type as any,
+          church_members: 0,
+        },
+      });
+
+      // Step 2: Create the church admin user (ID auto-generated by Prisma)
+      const churchAdminUser = await tx.user.create({
+        data: {
+          first_name: church_adminname.split(' ')[0] || church_adminname,
+          last_name: church_adminname.split(' ')[1] || '',
+          email: church_email,
+          password: hashedPassword,
+          phone_number: '',
+          church_name: church_name,
+          language: 'en',
+          type: Role.CHURCH_ADMIN,
+          status: UserStatus.ACTIVE,
+          church_id: church.id,
+          email_verified_at: new Date(),
+        },
+      });
+
+      // Step 3: Get or create the CHURCH_ADMIN role
+      let churchAdminRole = await tx.role.findFirst({
+        where: { name: Role.CHURCH_ADMIN },
+      });
+
+      if (!churchAdminRole) {
+        churchAdminRole = await tx.role.create({
+          data: {
+            name: Role.CHURCH_ADMIN,
+            title: 'Church Admin',
+            description:
+              'Church administrator with full control over church management',
+            status: 1,
+            color: '#FF8C00',
+          },
+        });
+      }
+
+      // Step 4: Assign the CHURCH_ADMIN role to the user
+      await tx.roleUser.create({
+        data: {
+          role_id: churchAdminRole.id,
+          user_id: churchAdminUser.id,
+          churchId: church.id,
+        },
+      });
+
+      // Step 5: Update church member count
+      await tx.church.update({
+        where: { id: church.id },
+        data: { church_members: 1 },
+      });
+
+      return { church, churchAdminUser };
+    });
+
+    // Return response without sensitive data
     return {
       success: true,
-      message: 'Church created successfully',
+      message:
+        'Church created successfully. Church admin user has been created.',
       data: {
-        church_id: church.data.id,
-        church_name: church.data.church_name,
-        church_email: church.data.church_email,
+        church: {
+          id: result.church.id,
+          name: result.church.church_name,
+          email: result.church.church_email,
+          domain: result.church.church_domain,
+          city: result.church.church_city,
+          status: result.church.status,
+        },
+        admin_user: {
+          id: result.churchAdminUser.id,
+          email: result.churchAdminUser.email,
+          name: `${result.churchAdminUser.first_name} ${result.churchAdminUser.last_name}`,
+          type: result.churchAdminUser.type,
+        },
       },
     };
   }

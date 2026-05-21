@@ -3,51 +3,42 @@ import { IsOptional, IsString, IsInt, Min, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetMembersDto {
-  @ApiPropertyOptional({ example: 1, description: 'Page number' })
+  @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ example: 10, description: 'Items per page' })
+  @ApiPropertyOptional({ default: 10 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   limit?: number = 10;
 
-  @ApiPropertyOptional({
-    example: 'John',
-    description: 'Search by name or email',
-  })
+  @ApiPropertyOptional({ description: 'Search by name or email' })
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({
-    enum: ['active', 'inactive'],
-    description: 'Filter by status',
-  })
+  @ApiPropertyOptional({ enum: ['active', 'inactive'] })
   @IsOptional()
-  @IsIn(['active', 'inactive'])
+  @IsString()
   status?: string;
 
-  @ApiPropertyOptional({
-    example: 'pastor',
-    description: 'Filter by role name',
-  })
+  @ApiPropertyOptional({ description: 'Filter by role name' })
   @IsOptional()
   @IsString()
   role?: string;
 
-  @ApiPropertyOptional({ example: 'created_at', description: 'Sort field' })
+  @ApiPropertyOptional({ default: 'created_at' })
   @IsOptional()
   @IsString()
   sortBy?: string = 'created_at';
 
-  @ApiPropertyOptional({ enum: ['asc', 'desc'], description: 'Sort order' })
+  @ApiPropertyOptional({ enum: ['asc', 'desc'], default: 'desc' })
   @IsOptional()
-  @IsIn(['asc', 'desc'])
-  sortOrder?: 'asc' | 'desc' = 'desc';
+  @IsString()
+  sortOrder?: string = 'desc';
 }

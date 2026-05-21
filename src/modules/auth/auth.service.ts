@@ -21,7 +21,12 @@ import { MailService } from '../../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { verifyPassword } from 'src/common/utils/password.util';
-import { ChurchStatus, UserStatus, UserType } from 'prisma/generated/enums';
+import {
+  ChurchStatus,
+  UserStatus,
+  UserType,
+  ChurchMemberStatus,
+} from 'prisma/generated/enums';
 import { CreateChurchDto } from './dto/create-church.dto';
 import { ChurchLoginDto } from './dto/login-church.dto';
 import * as bcrypt from 'bcrypt';
@@ -87,6 +92,7 @@ export class AuthService {
       };
     }
   }
+
   // done
   async register(createUserDto: CreateUserDto) {
     const {
@@ -164,12 +170,6 @@ export class AuthService {
       );
     }
 
-    if (!existingChurch) {
-      throw new BadRequestException(
-        `Church "${existingChurch.church_name}" not found or is not active. Please select a valid church from our platform.`,
-      );
-    }
-
     // 6. For PRO_USER, validate professional fields
     if (type === UserType.PRO_USER) {
       const requiredFields = [
@@ -209,7 +209,7 @@ export class AuthService {
 
     // 8. Create user with transaction
     const result = await this.prisma.$transaction(async (tx) => {
-      // Create the user with the church_id from the existing church
+      // Create the user (without church_id field)
       const user = await tx.user.create({
         data: {
           first_name,
@@ -222,7 +222,6 @@ export class AuthService {
           type: type || UserType.USER,
           status: UserStatus.PENDING,
           email_verified_at: null,
-          church_id: existingChurch.id, // Link user to the church
           // Professional fields (only for PRO_USER)
           ...(type === UserType.PRO_USER && {
             company_name,
@@ -244,6 +243,20 @@ export class AuthService {
         },
       });
 
+      // Create church membership
+      await tx.churchMember.create({
+        data: {
+          church_id: existingChurch.id,
+          user_id: user.id,
+          church_role:
+            type === UserType.PRO_USER
+              ? 'Professional Member'
+              : 'Regular Member',
+          status: ChurchMemberStatus.PENDING,
+          joined_at: new Date(),
+        },
+      });
+
       // Create OTP for email verification
       const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -258,9 +271,17 @@ export class AuthService {
       });
 
       // Update church member count
+      const memberCount = await tx.churchMember.count({
+        where: {
+          church_id: existingChurch.id,
+          status: ChurchMemberStatus.ACTIVE,
+          deleted_at: null,
+        },
+      });
+
       await tx.church.update({
         where: { id: existingChurch.id },
-        data: { church_members: { increment: 1 } },
+        data: { church_members: memberCount },
       });
 
       return { user, otpCode, church: existingChurch };
@@ -307,7 +328,7 @@ export class AuthService {
 
     console.log(`[Login Attempt] Email: ${email}`);
 
-    // Find user by email
+    // Find user by email with their church memberships
     const user = await this.prisma.user.findUnique({
       where: { email },
       include: {
@@ -316,7 +337,15 @@ export class AuthService {
           where: { churchId: { not: null } },
           take: 1,
         },
-        church: true, // Include church data for church admins
+        church_memberships: {
+          include: {
+            church: true,
+          },
+          where: {
+            status: ChurchMemberStatus.ACTIVE,
+          },
+          take: 1,
+        },
       },
     });
 
@@ -342,20 +371,24 @@ export class AuthService {
       throw new UnauthorizedException('Your account is inactive');
     }
 
+    // Get active church membership
+    const activeMembership = user.church_memberships[0];
+    const church = activeMembership?.church;
+
     // If user is CHURCH_ADMIN, check church status
-    if (user.type === 'CHURCH_ADMIN' && user.church) {
-      const churchStatus = user.church.status;
+    if (user.type === 'CHURCH_ADMIN' && church) {
+      const churchStatus = church.status;
 
       switch (churchStatus) {
-        case UserStatus.PENDING:
+        case ChurchStatus.PENDING:
           throw new UnauthorizedException(
             'Your church registration is pending approval. Please wait for admin approval.',
           );
-        case UserStatus.SUSPENDED:
+        case ChurchStatus.SUSPENDED:
           throw new UnauthorizedException(
             'Your church account has been suspended. Please contact support.',
           );
-        case UserStatus.ACTIVE:
+        case ChurchStatus.ACTIVE:
           // Church is active, allow login
           console.log(`[Church Status] Active - login allowed`);
           break;
@@ -386,8 +419,8 @@ export class AuthService {
       userId: user.id,
       type: user.type,
       role: currentRole?.name || user.type.toLowerCase(),
-      church_id: user.church_id,
-      church_status: user.church?.status,
+      church_id: church?.id || null,
+      church_status: church?.status || null,
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
@@ -410,16 +443,16 @@ export class AuthService {
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
-        church_id: user.church_id,
+        church_id: church?.id || null,
       },
     };
 
     // Include church status in response for church admins
-    if (user.type === 'CHURCH_ADMIN' && user.church) {
+    if (user.type === 'CHURCH_ADMIN' && church) {
       responseData.church = {
-        id: user.church.id,
-        name: user.church.church_name,
-        status: user.church.status,
+        id: church.id,
+        name: church.church_name,
+        status: church.status,
       };
     }
 
@@ -849,7 +882,7 @@ export class AuthService {
 
     // Create Church and Church Admin User in a transaction
     const result = await this.prisma.$transaction(async (tx) => {
-      // Step 1: Create the church (ID auto-generated by Prisma)
+      // Step 1: Create the church
       const church = await tx.church.create({
         data: {
           church_name,
@@ -863,7 +896,7 @@ export class AuthService {
         },
       });
 
-      // Step 2: Create the church admin user (ID auto-generated by Prisma)
+      // Step 2: Create the church admin user (without church_id)
       const churchAdminUser = await tx.user.create({
         data: {
           first_name: church_adminname.split(' ')[0] || church_adminname,
@@ -875,12 +908,23 @@ export class AuthService {
           language: 'en',
           type: Role.CHURCH_ADMIN,
           status: UserStatus.ACTIVE,
-          church_id: church.id,
           email_verified_at: new Date(),
         },
       });
 
-      // Step 3: Get or create the CHURCH_ADMIN role
+      // Step 3: Create church membership for admin
+      await tx.churchMember.create({
+        data: {
+          church_id: church.id,
+          user_id: churchAdminUser.id,
+          church_role: 'Church Admin',
+          status: ChurchMemberStatus.ACTIVE,
+          joined_at: new Date(),
+          approved_at: new Date(),
+        },
+      });
+
+      // Step 4: Get or create the CHURCH_ADMIN role
       let churchAdminRole = await tx.role.findFirst({
         where: { name: Role.CHURCH_ADMIN },
       });
@@ -898,7 +942,7 @@ export class AuthService {
         });
       }
 
-      // Step 4: Assign the CHURCH_ADMIN role to the user
+      // Step 5: Assign the CHURCH_ADMIN role to the user
       await tx.roleUser.create({
         data: {
           role_id: churchAdminRole.id,
@@ -907,10 +951,18 @@ export class AuthService {
         },
       });
 
-      // Step 5: Update church member count
+      // Step 6: Update church member count
+      const memberCount = await tx.churchMember.count({
+        where: {
+          church_id: church.id,
+          status: ChurchMemberStatus.ACTIVE,
+          deleted_at: null,
+        },
+      });
+
       await tx.church.update({
         where: { id: church.id },
-        data: { church_members: 1 },
+        data: { church_members: memberCount },
       });
 
       return { church, churchAdminUser };
@@ -1133,33 +1185,17 @@ export class AuthService {
             const isValid = await this.userRepository.verify2FA(user.id, token);
             if (!isValid) {
               throw new UnauthorizedException('Invalid token');
-              // return {
-              //   success: false,
-              //   message: 'Invalid token',
-              // };
             }
           } else {
             throw new UnauthorizedException('Token is required');
-            // return {
-            //   success: false,
-            //   message: 'Token is required',
-            // };
           }
         }
         return result;
       } else {
         throw new UnauthorizedException('Password not matched');
-        // return {
-        //   success: false,
-        //   message: 'Password not matched',
-        // };
       }
     } else {
       throw new UnauthorizedException('Email not found');
-      // return {
-      //   success: false,
-      //   message: 'Email not found',
-      // };
     }
   }
 

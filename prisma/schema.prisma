@@ -7,6 +7,28 @@ datasource db {
   provider = "postgresql"
 }
 
+
+enum UserType {
+  SUPER_ADMIN
+  ADMIN
+  CHURCH_ADMIN
+  USER
+  PRO_USER
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+
+
+// ==========================================
+// Account 
+// ==========================================
+
 model Account {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
@@ -30,20 +52,10 @@ model Account {
   @@map("accounts")
 }
 
-enum UserType {
-  SUPER_ADMIN
-  ADMIN
-  CHURCH_ADMIN
-  USER
-  PRO_USER
-}
+// ==========================================
+//  USER MODEL
+// ==========================================
 
-enum UserStatus {
-  PENDING
-  ACTIVE
-  SUSPENDED
-  REJECTED
-}
 
 model User {
   id         String    @id @default(cuid())
@@ -82,6 +94,7 @@ model User {
   description        String? @db.Text
 
   // fcm token for push notifications 
+  fcm_token     String?
   google_id     String? @unique 
   apple_id      String? @unique
 
@@ -116,6 +129,8 @@ model User {
   two_factor_secret     String?
   accounts              Account[]
 
+  // -----------------(relation)-------------------
+
   // --- Conversation & Messaging ---
   participants Participant[] @relation("participantUser")
   sentMessages Message[]     @relation("messageSender")
@@ -124,16 +139,17 @@ model User {
   receivedNotifications Notification[] @relation("notificationReceiver")
   sentNotifications     Notification[] @relation("notificationSender")
 
-  church_id String?
-  church    Church? @relation(fields: [church_id], references: [id])
 
   // --- Other Relation --- 
   ucodes                   Ucode[]
   roles_assigned_to_me     RoleUser[]                @relation("UserRoles")
   roles_i_assigned         RoleUser[]                @relation("RoleAssignment")
   userNotificationSettings UserNotificationSetting[]
-  church_memberships ChurchMember[]
-
+  
+  // community
+  churchUser         Church[] @relation("ChurchToUser")
+  church_memberships ChurchMember[]    @relation("UserToMemberships")
+  church_communities ChurchCommunity[] @relation("UserToCommunities")
   @@map("users")
 }
 
@@ -160,6 +176,7 @@ model Ucode {
  * ---------------------------------------------------------------------
  */
 
+
 enum ChurchAuthType {
   SYSTEM_ADMIN
   EDITOR
@@ -174,10 +191,23 @@ enum ChurchStatus {
   SUSPENDED
 }
 
+enum ChurchMemberStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  REMOVED
+}
+
+enum ReactType {
+  LIKE
+  LOVE
+}
+
+
 model Church {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
   deleted_at DateTime?
 
   church_name      String @db.VarChar(255)
@@ -186,50 +216,50 @@ model Church {
   church_domain    String @unique
   church_adminname String @db.VarChar(255)
 
-  // fcm token for push notifications 
-  google_id     String? @unique 
-  apple_id      String? @unique
+  google_id String? @unique 
+  apple_id  String? @unique
 
   church_members Int? @default(0)
 
   status    ChurchStatus   @default(PENDING)
   auth_type ChurchAuthType @default(CHURCH_ADMIN)
 
-  // relations
-  users     User[]
-  roleUsers RoleUser[]
-  members ChurchMember[]
+  user_id String?
+  user    User?   @relation("ChurchToUser", fields: [user_id], references: [id], onDelete: Cascade)
+
+  roleUsers          RoleUser[]
+  members            ChurchMember[]    @relation("ChurchToMembers")
+  church_communities ChurchCommunity[] @relation("ChurchToCommunities")
 
   @@map("churches")
 }
 
+
+
 model ChurchMember {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
   deleted_at DateTime?
 
-  church_id   String
-  church      Church   @relation(fields: [church_id], references: [id], onDelete: Cascade)
+  church_id String
+  church    Church   @relation("ChurchToMembers", fields: [church_id], references: [id], onDelete: Cascade)
   
-  user_id     String
-  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id   String
+  user      User     @relation("UserToMemberships", fields: [user_id], references: [id], onDelete: Cascade)
   
-  // Role within the church (separate from system roles)
-  church_role  String?  @db.VarChar(100) // e.g., "Helper", "Member", "Leader", "Pastor"
+  church_role String?  @db.VarChar(100) 
+  status      ChurchMemberStatus @default(ACTIVE)
+  joined_at   DateTime @default(now())
   
-  // Status within the church
-  status       ChurchMemberStatus @default(ACTIVE)
-  
-  // When they joined the church
-  joined_at    DateTime @default(now())
-  
-  // Who approved them
-  approved_by  String?
-  approved_at  DateTime?
-  
-  // Additional metadata
-  notes        String?  @db.Text
+  approved_by String?
+  approved_at DateTime?
+  notes       String?  @db.Text
+
+  communities ChurchCommunity[]    @relation("MemberToCommunities")
+  posts       CommunityPost[]      @relation("MemberToPosts")
+  comments    CommunityComment[]   @relation("MemberToComments")
+  reacts      CommunityPostReact[] @relation("MemberToReacts")
   
   @@unique([church_id, user_id])
   @@index([church_id])
@@ -238,12 +268,90 @@ model ChurchMember {
   @@map("church_members")
 }
 
-enum ChurchMemberStatus {
-  PENDING   // Waiting for approval
-  ACTIVE    // Active member
-  INACTIVE  // Inactive member
-  REMOVED   // Removed from church
+
+
+model ChurchCommunity {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
+  deleted_at DateTime?
+
+  community_name String @db.VarChar(255)
+  description    String @db.Text
+
+  user_id String
+  user    User   @relation("UserToCommunities", fields: [user_id], references: [id], onDelete: Cascade)
+
+  church_id String
+  church    Church @relation("ChurchToCommunities", fields: [church_id], references: [id], onDelete: Cascade)
+ 
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToCommunities", fields: [church_member_id], references: [id], onDelete: Cascade)
+
+  posts CommunityPost[] @relation("CommunityToPosts")
+
+  @@map("church_community")
 }
+
+
+
+model CommunityPost {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+  
+  title String
+  image String[]
+
+  community_id String
+  community    ChurchCommunity @relation("CommunityToPosts", fields: [community_id], references: [id], onDelete: Cascade)
+
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToPosts", fields: [church_member_id], references: [id], onDelete: Cascade)
+   
+  comments CommunityComment[]   @relation("PostToComments")
+  reacts   CommunityPostReact[] @relation("PostToReacts")
+
+  @@map("community_post")
+}
+
+
+model CommunityComment {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  content String   @db.Text
+  image   String[]
+
+  post_id String
+  post    CommunityPost @relation("PostToComments", fields: [post_id], references: [id], onDelete: Cascade)
+
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToComments", fields: [church_member_id], references: [id], onDelete: Cascade)
+  
+  @@map("community_comment")
+}
+
+
+
+model CommunityPostReact {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  react_type ReactType
+
+  post_id String
+  post    CommunityPost @relation("PostToReacts", fields: [post_id], references: [id], onDelete: Cascade)
+
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToReacts", fields: [church_member_id], references: [id], onDelete: Cascade)
+  
+  @@map("community_post_react")
+}
+
+
 
 /**
  * ---------------------------------------------------------------------

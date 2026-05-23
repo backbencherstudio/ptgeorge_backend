@@ -7,7 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-
 enum UserType {
   SUPER_ADMIN
   ADMIN
@@ -22,8 +21,6 @@ enum UserStatus {
   SUSPENDED
   REJECTED
 }
-
-
 
 // ==========================================
 // Account 
@@ -56,11 +53,10 @@ model Account {
 //  USER MODEL
 // ==========================================
 
-
 model User {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String      @id @default(cuid())
+  created_at DateTime    @default(now())
+  updated_at DateTime    @default(now())
   deleted_at DateTime?
   status     UserStatus? @default(PENDING)
 
@@ -94,9 +90,9 @@ model User {
   description        String? @db.Text
 
   // fcm token for push notifications 
-  fcm_token     String?
-  google_id     String? @unique 
-  apple_id      String? @unique
+  fcm_token String?
+  google_id String? @unique
+  apple_id  String? @unique
 
   // other info
   avatar   String?
@@ -139,17 +135,17 @@ model User {
   receivedNotifications Notification[] @relation("notificationReceiver")
   sentNotifications     Notification[] @relation("notificationSender")
 
-
   // --- Other Relation --- 
   ucodes                   Ucode[]
   roles_assigned_to_me     RoleUser[]                @relation("UserRoles")
   roles_i_assigned         RoleUser[]                @relation("RoleAssignment")
   userNotificationSettings UserNotificationSetting[]
-  
+
   // community
-  churchUser         Church[] @relation("ChurchToUser")
+  churchUser         Church[]          @relation("ChurchToUser")
   church_memberships ChurchMember[]    @relation("UserToMemberships")
   church_communities ChurchCommunity[] @relation("UserToCommunities")
+
   @@map("users")
 }
 
@@ -175,7 +171,6 @@ model Ucode {
  * Church Details Schema start
  * ---------------------------------------------------------------------
  */
-
 
 enum ChurchAuthType {
   SYSTEM_ADMIN
@@ -203,7 +198,6 @@ enum ReactType {
   LOVE
 }
 
-
 model Church {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
@@ -216,7 +210,7 @@ model Church {
   church_domain    String @unique
   church_adminname String @db.VarChar(255)
 
-  google_id String? @unique 
+  google_id String? @unique
   apple_id  String? @unique
 
   church_members Int? @default(0)
@@ -234,8 +228,6 @@ model Church {
   @@map("churches")
 }
 
-
-
 model ChurchMember {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
@@ -243,32 +235,30 @@ model ChurchMember {
   deleted_at DateTime?
 
   church_id String
-  church    Church   @relation("ChurchToMembers", fields: [church_id], references: [id], onDelete: Cascade)
-  
-  user_id   String
-  user      User     @relation("UserToMemberships", fields: [user_id], references: [id], onDelete: Cascade)
-  
-  church_role String?  @db.VarChar(100) 
+  church    Church @relation("ChurchToMembers", fields: [church_id], references: [id], onDelete: Cascade)
+
+  user_id String
+  user    User   @relation("ChurchMemberToUser", fields: [user_id], references: [id], onDelete: Cascade)
+
+  church_role String?            @db.VarChar(100)
   status      ChurchMemberStatus @default(ACTIVE)
-  joined_at   DateTime @default(now())
-  
+  joined_at   DateTime           @default(now())
+
   approved_by String?
   approved_at DateTime?
-  notes       String?  @db.Text
+  notes       String?   @db.Text
 
   communities ChurchCommunity[]    @relation("MemberToCommunities")
   posts       CommunityPost[]      @relation("MemberToPosts")
   comments    CommunityComment[]   @relation("MemberToComments")
   reacts      CommunityPostReact[] @relation("MemberToReacts")
-  
+
   @@unique([church_id, user_id])
   @@index([church_id])
   @@index([user_id])
   @@index([status])
   @@map("church_members")
 }
-
-
 
 model ChurchCommunity {
   id         String    @id @default(cuid())
@@ -284,7 +274,7 @@ model ChurchCommunity {
 
   church_id String
   church    Church @relation("ChurchToCommunities", fields: [church_id], references: [id], onDelete: Cascade)
- 
+
   church_member_id String
   church_member    ChurchMember @relation("MemberToCommunities", fields: [church_member_id], references: [id], onDelete: Cascade)
 
@@ -293,28 +283,25 @@ model ChurchCommunity {
   @@map("church_community")
 }
 
-
-
 model CommunityPost {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
-  
-  title String
-  image String[]
 
-  community_id String
-  community    ChurchCommunity @relation("CommunityToPosts", fields: [community_id], references: [id], onDelete: Cascade)
+  title String
+  image String?
+
+  user_id String
+  user    User   @relation("UserToPosts",fields: [user_id], references: [id], onDelete: Cascade)
 
   church_member_id String
   church_member    ChurchMember @relation("MemberToPosts", fields: [church_member_id], references: [id], onDelete: Cascade)
-   
+
   comments CommunityComment[]   @relation("PostToComments")
   reacts   CommunityPostReact[] @relation("PostToReacts")
 
   @@map("community_post")
 }
-
 
 model CommunityComment {
   id         String   @id @default(cuid())
@@ -322,18 +309,16 @@ model CommunityComment {
   updated_at DateTime @default(now()) @updatedAt
 
   content String   @db.Text
-  image   String[]
+  image   String?
 
   post_id String
   post    CommunityPost @relation("PostToComments", fields: [post_id], references: [id], onDelete: Cascade)
 
   church_member_id String
   church_member    ChurchMember @relation("MemberToComments", fields: [church_member_id], references: [id], onDelete: Cascade)
-  
+
   @@map("community_comment")
 }
-
-
 
 model CommunityPostReact {
   id         String   @id @default(cuid())
@@ -347,11 +332,9 @@ model CommunityPostReact {
 
   church_member_id String
   church_member    ChurchMember @relation("MemberToReacts", fields: [church_member_id], references: [id], onDelete: Cascade)
-  
+
   @@map("community_post_react")
 }
-
-
 
 /**
  * ---------------------------------------------------------------------

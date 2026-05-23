@@ -25,6 +25,8 @@ async function bootstrap() {
     rawBody: true,
   });
 
+  app.set('trust proxy', true);
+
   app.useWebSocketAdapter(new IoAdapter(app));
   app.setGlobalPrefix('api');
   app.enableCors({

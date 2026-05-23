@@ -56,7 +56,7 @@ export class UserController {
     @Body() createUserDto: CreateUserDto,
     @Req() req: Request,
   ) {
-    const adminId = (req.user as any).id;
+    const adminId = (req.user as any).userId;
     return this.userService.createUserByAdmin(createUserDto, adminId);
   }
 
@@ -110,7 +110,7 @@ export class UserController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const currentUserId = (req.user as any).id;
+    const currentUserId = (req.user as any).userId;
     return this.userService.getAllUsers(currentUserId, {
       church_id,
       type,
@@ -146,7 +146,7 @@ export class UserController {
     @Param('id') id: string,
     @Body() dto: UpdateUserStatusDto,
   ) {
-    const adminId = (req.user as any).id;
+    const adminId = (req.user as any).userId;
     return this.userService.updateUserStatus(id, dto, adminId);
   }
 
@@ -164,7 +164,7 @@ export class UserController {
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    const adminId = (req.user as any).id;
+    const adminId = (req.user as any).userId;
     return this.userService.updateUser(id, updateUserDto, adminId);
   }
 
@@ -177,7 +177,7 @@ export class UserController {
   @ApiResponse({ status: 400, description: 'Cannot delete own account' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async deleteUser(@Req() req: Request, @Param('id') id: string) {
-    const adminId = (req.user as any).id;
+    const adminId = (req.user as any).userId;
     return this.userService.deleteUser(id, adminId);
   }
 }

@@ -10,6 +10,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -244,57 +245,39 @@ After registration:
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Patch('profile')
-  @ApiOperation({
-    summary: 'Update user profile',
-    description:
-      'Update user information and/or profile image. Image must be less than 5MB.',
-  })
+  @ApiOperation({ summary: 'Update user profile' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description: 'User data and optional image file',
     schema: {
       type: 'object',
       properties: {
-        name: { type: 'string', example: 'John Doe' },
-        first_name: { type: 'string', example: 'John' },
-        last_name: { type: 'string', example: 'Doe' },
-        address: { type: 'string', example: '123 Main St' },
-        phone_number: { type: 'string', example: '+1234567890' },
-        language: { type: 'string', example: 'English' },
-        // Professional fields (for PRO_USER)
-        company_name: { type: 'string', example: 'Tech Solutions' },
-        business_email: {
-          type: 'string',
-          example: 'contact@techsolutions.com',
-        },
-        business_phone: { type: 'string', example: '+1234567890' },
-        service: { type: 'string', example: 'IT Consulting' },
-        category: { type: 'string', example: 'Technology' },
-        profession: { type: 'string', example: 'IT Consultant' },
-        website: { type: 'string', example: 'https://techsolutions.com' },
-        whatsapp_number: { type: 'string', example: '+1234567890' },
-        available_time: { type: 'string', example: 'Mon-Fri 9AM-6PM' },
-        address_line1: { type: 'string', example: '123 Business St' },
-        address_line2: { type: 'string', example: 'Suite 100' },
-        state: { type: 'string', example: 'California' },
-        country: { type: 'string', example: 'USA' },
-        zip_code: { type: 'string', example: '90210' },
-        description: { type: 'string', example: 'Business description' },
-        image: {
-          type: 'string',
-          format: 'binary',
-          description: 'Profile image (JPEG, PNG, WEBP, max 5MB)',
-        },
+        first_name: { type: 'string' },
+        last_name: { type: 'string' },
+        phone_number: { type: 'string' },
+        language: { type: 'string' },
+        address_line1: { type: 'string' },
+        address_line2: { type: 'string' },
+        state: { type: 'string' },
+        country: { type: 'string' },
+        zip_code: { type: 'string' },
+        company_name: { type: 'string' },
+        business_email: { type: 'string' },
+        business_phone: { type: 'string' },
+        service: { type: 'string' },
+        category: { type: 'string' },
+        profession: { type: 'string' },
+        website: { type: 'string' },
+        whatsapp_number: { type: 'string' },
+        available_time: { type: 'string' },
+        description: { type: 'string' },
+        image: { type: 'string', format: 'binary' },
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'User updated successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseInterceptors(
     FileInterceptor('image', {
       storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         const allowedMimes = [
           'image/jpeg',
@@ -307,7 +290,7 @@ After registration:
         } else {
           cb(
             new BadRequestException(
-              'Invalid file type. Only JPEG, PNG, and WEBP images are allowed.',
+              'Only JPEG, PNG, and WEBP images are allowed',
             ),
             false,
           );
@@ -320,21 +303,15 @@ After registration:
     @Body() updateUserDto: UpdateUserDto,
     @UploadedFile() image?: Express.Multer.File,
   ) {
-    const userId = (req.user as any).id || (req.user as any).userId;
+    const userId = req.user?.userId;
 
-    // Call service method
-    const response = await this.authService.updateUser(
-      userId,
-      updateUserDto,
-      image,
-    );
+    console.log(userId)
 
-    // Return proper HTTP status
-    if (!response.success) {
-      throw new BadRequestException(response.message);
+    if (!userId) {
+      throw new UnauthorizedException('User not authenticated');
     }
 
-    return response;
+    return this.authService.updateUser(userId, updateUserDto, userId, image);
   }
 
   @Post('forgot-password')

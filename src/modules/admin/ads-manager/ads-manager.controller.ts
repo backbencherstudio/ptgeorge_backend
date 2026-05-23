@@ -323,8 +323,16 @@ export class AdsController {
           example: 'Toronto',
           description: 'Target city/state (optional)',
         },
-        start_date: { type: 'string', format: 'date-time'},
-        end_date: { type: 'string', format: 'date-time'},
+        start_date: {
+          type: 'string',
+          format: 'date-time',
+          example: '2027-01-10T00:00:00Z',
+        },
+        end_date: {
+          type: 'string',
+          format: 'date-time',
+          example: '2030-12-31T23:59:59Z',
+        },
         thumbnail: {
           type: 'string',
           format: 'binary',

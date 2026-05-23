@@ -125,89 +125,12 @@ export class UcodeRepository {
     return true;
   }
 
-  /**
-   * verify ucode token
-   * @returns { success: boolean, message: string }
-   */
-  async verifyToken({ email, token }: { email: string; token: string }) {
-    const updatedToken = await this.prisma.ucode.updateMany({
-      where: {
-        token: token,
-        email: email,
-        verified_at: null,
-      },
-      data: { verified_at: new Date() },
-    });
-
-    if (updatedToken.count === 0) {
-      const existToken = await this.prisma.ucode.findFirst({
-        where: {
-          token: token,
-          email: email,
-        },
-      });
-
-      if (!existToken) {
-        return {
-          success: false,
-          message: 'Invalid token',
-        };
-      }
-
-      if (existToken.verified_at) {
-        return {
-          success: false,
-          message: 'Token already verified',
-        };
-      }
-
-      if (existToken.expired_at && existToken.expired_at < new Date()) {
-        await this.prisma.ucode.delete({
-          where: { id: existToken.id },
-        });
-        return {
-          success: false,
-          message: 'Token expired',
-        };
-      }
-
-      return {
-        success: false,
-        message: 'Invalid token',
-      };
-    }
-
-    // Token was successfully verified, now check if it was expired
-    const verifiedToken = await this.prisma.ucode.findFirst({
-      where: {
-        token: token,
-        email: email,
-      },
-    });
-
-    // Check if token was expired (updateMany doesn't check expiry)
-    if (verifiedToken?.expired_at && verifiedToken.expired_at < new Date()) {
-      await this.prisma.ucode.delete({
-        where: { id: verifiedToken.id },
-      });
-      return {
-        success: false,
-        message: 'Token expired',
-      };
-    }
-
-    return {
-      success: true,
-      message: 'Token verified successfully',
-    };
-  }
 
   /**
    * Check if token is verified
    * @returns boolean - true if verified, false otherwise
    */
   async verifycheckToken({ email, token }: { email: string; token: string }) {
-    
     const existToken = await this.prisma.ucode.findFirst({
       where: {
         token: token,
@@ -236,6 +159,48 @@ export class UcodeRepository {
         AND: [{ email: email }, { token: token }],
       },
     });
+  }
+
+  async deleteExpiredTokens(email: string) {
+    await this.prisma.ucode.deleteMany({
+      where: {
+        email: email,
+        OR: [
+          { expired_at: { lt: new Date() } },
+          { verified_at: { not: null } },
+        ],
+      },
+    });
+  }
+
+  async verifyToken({ email, token }: { email: string; token: string }) {
+    const ucode = await this.prisma.ucode.findFirst({
+      where: {
+        email: email,
+        token: token,
+        expired_at: { gt: new Date() },
+        verified_at: null,
+        status: 1,
+      },
+    });
+
+    if (!ucode) {
+      return {
+        success: false,
+        message: 'Invalid or expired OTP',
+      };
+    }
+
+    // Mark as verified
+    await this.prisma.ucode.update({
+      where: { id: ucode.id },
+      data: { verified_at: new Date() },
+    });
+
+    return {
+      success: true,
+      message: 'OTP verified successfully',
+    };
   }
 
   async createVerificationToken(params: { userId: string; email: string }) {

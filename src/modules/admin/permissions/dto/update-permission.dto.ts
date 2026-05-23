@@ -3,8 +3,8 @@ import { PartialType } from '@nestjs/mapped-types';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   CreatePermissionDto,
+  PERMISSION_CATEGORIES,
   PermissionAction,
-  PERMISSION_SUBJECTS,
 } from './create-permission.dto';
 import { IsString, IsOptional, IsEnum, IsIn } from 'class-validator';
 
@@ -34,7 +34,7 @@ export class UpdatePermissionDto extends PartialType(CreatePermissionDto) {
       'Category groups permissions visually in the UI and becomes the subject used by backend guards. ' +
       'Must be one of the fixed allowed values. Changing this affects which controller actions this permission protects.',
     example: 'Church',
-    enum: PERMISSION_SUBJECTS,
+    enum: PERMISSION_CATEGORIES,
     examples: {
       'Church Category': {
         summary: 'Church management permissions',
@@ -72,8 +72,8 @@ export class UpdatePermissionDto extends PartialType(CreatePermissionDto) {
   })
   @IsString()
   @IsOptional()
-  @IsIn([...PERMISSION_SUBJECTS], {
-    message: `category must be one of: ${PERMISSION_SUBJECTS.join(', ')}`,
+  @IsIn([...PERMISSION_CATEGORIES], {
+    message: `category must be one of: ${PERMISSION_CATEGORIES.join(', ')}`,
   })
   category?: string;
 

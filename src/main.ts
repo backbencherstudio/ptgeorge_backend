@@ -3,7 +3,6 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule } from '@nestjs/swagger';
-import helmet from 'helmet';
 import { join } from 'path';
 // internal imports
 import { IoAdapter } from '@nestjs/platform-socket.io';

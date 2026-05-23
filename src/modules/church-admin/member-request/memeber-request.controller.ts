@@ -90,7 +90,7 @@ export class ProUserController {
   }
 
   @Post(':userId/approve')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CHURCH_ADMIN)
   @ApiOperation({
     summary: 'Approve a user as helper or member',
     description:

@@ -8,134 +8,176 @@ import {
   Delete,
   UseGuards,
   Query,
+  Req,
+  HttpStatus,
+  HttpCode,
 } from '@nestjs/common';
 import { UserService } from './user.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { ApiBearerAuth, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Role } from '../../../common/guard/role/role.enum';
 import { Roles } from '../../../common/guard/role/roles.decorator';
 import { RolesGuard } from '../../../common/guard/role/roles.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { UserStatus, UserType } from 'prisma/generated/enums';
+import { CreateUserDto } from 'src/modules/auth/dto/create-user.dto';
+import { UpdateUserDto } from 'src/modules/auth/dto/update-user.dto';
+import { Request } from 'express';
+import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
+import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 
 @ApiBearerAuth()
 @ApiTags('User')
+@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN)
-@Controller('admin/user')
+@Controller('/user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @ApiResponse({ description: 'Create a user' })
   @Post()
-  async create(@Body() createUserDto: CreateUserDto) {
-    try {
-      const user = await this.userService.create(createUserDto);
-      return user;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiResponse({ description: 'Get all users' })
-  @Get()
-  async findAll(
-    @Query() query: { q?: string; type?: string; approved?: string },
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: '[ADMIN] Create a user',
+    description: 'Create a new user with auto-activation (admin only)',
+  })
+  @ApiBody({ type: CreateUserDto })
+  @ApiResponse({ status: 201, description: 'User created successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 409, description: 'Email or phone already exists' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async createUserByAdmin(
+    @Body() createUserDto: CreateUserDto,
+    @Req() req: Request,
   ) {
-    try {
-      const q = query.q;
-      const type = query.type;
-      const approved = query.approved;
-
-      const users = await this.userService.findAll({ q, type, approved });
-      return users;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+    const adminId = (req.user as any).id;
+    return this.userService.createUserByAdmin(createUserDto, adminId);
   }
 
-  // approve user
-  @Roles(Role.ADMIN)
-  @ApiResponse({ description: 'Approve a user' })
-  @Post(':id/approve')
-  async approve(@Param('id') id: string) {
-    try {
-      const user = await this.userService.approve(id);
-      return user;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+  @Get()
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.CHURCH_ADMIN)
+  @ApiOperation({
+    summary: 'Get all users',
+    description: 'Retrieve users with filtering options',
+  })
+  @ApiQuery({
+    name: 'church_id',
+    required: false,
+    description: 'Filter by church ID',
+  })
+  @ApiQuery({
+    name: 'type',
+    enum: UserType,
+    required: false,
+    description: 'Filter by user type',
+  })
+  @ApiQuery({
+    name: 'status',
+    enum: UserStatus,
+    required: false,
+    description: 'Filter by status',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by name, email, or phone',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Page number',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Items per page',
+    example: 10,
+  })
+  @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
+  async getAllUsers(
+    @Req() req: Request,
+    @Query('church_id') church_id?: string,
+    @Query('type') type?: UserType,
+    @Query('status') status?: UserStatus,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const currentUserId = (req.user as any).id;
+    return this.userService.getAllUsers(currentUserId, {
+      church_id,
+      type,
+      status,
+      search,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 10,
+    });
   }
 
-  // reject user
-  @Roles(Role.ADMIN)
-  @ApiResponse({ description: 'Reject a user' })
-  @Post(':id/reject')
-  async reject(@Param('id') id: string) {
-    try {
-      const user = await this.userService.reject(id);
-      return user;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiResponse({ description: 'Get a user by id' })
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    try {
-      const user = await this.userService.findOne(id);
-      return user;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.CHURCH_ADMIN)
+  @ApiOperation({ summary: 'Get user by ID' })
+  @ApiResponse({ status: 200, description: 'User found' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async getUserById(@Param('id') id: string) {
+    return this.userService.getUserById(id);
+  }
+
+  @Patch(':id/status')
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '[ADMIN] Update user status',
+    description: 'Activate, suspend, or reject a user',
+  })
+  @ApiBody({ type: UpdateUserStatusDto })
+  @ApiResponse({ status: 200, description: 'Status updated' })
+  @ApiResponse({ status: 400, description: 'Invalid status' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async updateUserStatus(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdateUserStatusDto,
+  ) {
+    const adminId = (req.user as any).id;
+    return this.userService.updateUserStatus(id, dto, adminId);
   }
 
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    try {
-      const user = await this.userService.update(id, updateUserDto);
-      return user;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.CHURCH_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update user information' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async updateUser(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    const adminId = (req.user as any).id;
+    return this.userService.updateUser(id, updateUserDto, adminId);
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string) {
-    try {
-      const user = await this.userService.remove(id);
-      return user;
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '[ADMIN] Delete user (soft delete)' })
+  @ApiResponse({ status: 200, description: 'User deleted successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 400, description: 'Cannot delete own account' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async deleteUser(@Req() req: Request, @Param('id') id: string) {
+    const adminId = (req.user as any).id;
+    return this.userService.deleteUser(id, adminId);
   }
-
-
-  
-
-
 }
-
-

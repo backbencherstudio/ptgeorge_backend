@@ -15,21 +15,15 @@ export enum PermissionAction {
   DELETE = 'delete',
 }
 
-// UI Categories for the Roles & Permissions page
+// Fixed categories — must match what your backend guards check against.
+// Extend this list as your platform grows.
 export const PERMISSION_CATEGORIES = [
   'Church',
   'Users',
+  'Role',
   'Members',
   'Content',
   'System',
-] as const;
-
-// Fixed subjects — must match what your backend guards check against.
-// Extend this list as your platform grows.
-export const PERMISSION_SUBJECTS = [
-  'Church',
-  'User',
-  'Role',
   'Permission',
   'Notification',
   'Announcement',

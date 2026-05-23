@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -38,6 +39,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CreateChurchDto } from './dto/create-church.dto';
 import { ChurchLoginDto } from './dto/login-church.dto';
 import appConfig from 'src/config/app.config';
+import { ForgotPasswordDto, ResetPasswordDto, VerifyOtpDto } from './dto/forgot-password.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -239,115 +241,134 @@ After registration:
     return result;
   }
 
-  // User profile update endpoint
-  @ApiBearerAuth('super_admin-token')
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @Patch('update')
+  @Patch('profile')
   @ApiOperation({
     summary: 'Update user profile',
     description:
       'Update user information and/or profile image. Image must be less than 5MB.',
   })
+  @ApiConsumes('multipart/form-data')
   @ApiBody({
     description: 'User data and optional image file',
     schema: {
       type: 'object',
       properties: {
-        name: { type: 'string' },
-        first_name: { type: 'string' },
-        last_name: { type: 'string' },
-        address: { type: 'string' },
-        image: { type: 'string', format: 'binary' },
+        name: { type: 'string', example: 'John Doe' },
+        first_name: { type: 'string', example: 'John' },
+        last_name: { type: 'string', example: 'Doe' },
+        address: { type: 'string', example: '123 Main St' },
+        phone_number: { type: 'string', example: '+1234567890' },
+        language: { type: 'string', example: 'English' },
+        // Professional fields (for PRO_USER)
+        company_name: { type: 'string', example: 'Tech Solutions' },
+        business_email: {
+          type: 'string',
+          example: 'contact@techsolutions.com',
+        },
+        business_phone: { type: 'string', example: '+1234567890' },
+        service: { type: 'string', example: 'IT Consulting' },
+        category: { type: 'string', example: 'Technology' },
+        profession: { type: 'string', example: 'IT Consultant' },
+        website: { type: 'string', example: 'https://techsolutions.com' },
+        whatsapp_number: { type: 'string', example: '+1234567890' },
+        available_time: { type: 'string', example: 'Mon-Fri 9AM-6PM' },
+        address_line1: { type: 'string', example: '123 Business St' },
+        address_line2: { type: 'string', example: 'Suite 100' },
+        state: { type: 'string', example: 'California' },
+        country: { type: 'string', example: 'USA' },
+        zip_code: { type: 'string', example: '90210' },
+        description: { type: 'string', example: 'Business description' },
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: 'Profile image (JPEG, PNG, WEBP, max 5MB)',
+        },
       },
     },
   })
-  @ApiResponse({
-    status: 200,
-    description: 'User updated successfully',
-    schema: {
-      example: {
-        success: true,
-        message: 'User updated successfully',
-        data: { userId: 1 },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad request - Invalid file size or format',
-  })
+  @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseInterceptors(
     FileInterceptor('image', {
       storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      fileFilter: (req, file, cb) => {
+        const allowedMimes = [
+          'image/jpeg',
+          'image/png',
+          'image/jpg',
+          'image/webp',
+        ];
+        if (allowedMimes.includes(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(
+            new BadRequestException(
+              'Invalid file type. Only JPEG, PNG, and WEBP images are allowed.',
+            ),
+            false,
+          );
+        }
+      },
     }),
   )
-  async updateUser(
+  async updateUserProfile(
     @Req() req: Request,
-    @Body() data: UpdateUserDto,
-    @UploadedFile() image: Express.Multer.File,
+    @Body() updateUserDto: UpdateUserDto,
+    @UploadedFile() image?: Express.Multer.File,
   ) {
-    try {
-      const user_id = req.user.userId;
-      const response = await this.authService.updateUser(user_id, data, image);
-      return response;
-    } catch (error: any) {
-      return {
-        success: false,
-        message: 'Failed to update user',
-      };
+    const userId = (req.user as any).id || (req.user as any).userId;
+
+    // Call service method
+    const response = await this.authService.updateUser(
+      userId,
+      updateUserDto,
+      image,
+    );
+
+    // Return proper HTTP status
+    if (!response.success) {
+      throw new BadRequestException(response.message);
     }
+
+    return response;
   }
 
   @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Request password reset',
-    description: 'Send password reset email to user with OTP code',
+    summary: 'Step 1: Request password reset OTP',
+    description: 'Send OTP to user email for password reset',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['email'],
-      properties: {
-        email: { type: 'string', format: 'email' },
-      },
-    },
+  @ApiBody({ type: ForgotPasswordDto })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @Post('verify-reset-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Step 2: Verify OTP and get reset token',
+    description: 'Verify the OTP sent to email and receive a reset token',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Reset email sent successfully',
-    schema: {
-      example: {
-        success: true,
-        message: 'Password reset email sent',
-      },
-    },
+  @ApiBody({ type: VerifyOtpDto })
+  async verifyResetOtp(@Body() verifyOtpDto: VerifyOtpDto) {
+    return this.authService.verifyResetOtp(verifyOtpDto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Step 3: Reset password using reset token',
+    description:
+      'Reset password using the reset token received from OTP verification',
   })
-  @ApiResponse({
-    status: 404,
-    description: 'User not found',
-  })
-  @ApiResponse({
-    status: 500,
-    description: 'Failed to send email',
-  })
-  async forgotPassword(@Body() data: { email: string }) {
-    try {
-      const email = data.email;
-      if (!email) {
-        throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
-      }
-      return await this.authService.forgotPassword(email);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: 'Something went wrong',
-      };
-    }
+  @ApiBody({ type: ResetPasswordDto })
+  async resetPasswordWithToken(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPasswordWithToken(resetPasswordDto);
   }
 
   @Post('verify-email')
@@ -429,103 +450,15 @@ After registration:
     }
   }
 
-  @Post('reset-password')
+  @Post('resend-otp')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Reset password with token',
-    description: 'Reset user password using token from reset email',
+    summary: 'Resend password reset OTP',
+    description: 'Resend OTP for password reset',
   })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['email', 'token', 'password'],
-      properties: {
-        email: { type: 'string', format: 'email' },
-        token: { type: 'string' },
-        password: { type: 'string', minLength: 8 },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Password reset successfully',
-  })
-  async resetPassword(
-    @Body() data: { email: string; token: string; password: string },
-  ) {
-    try {
-      const email = data.email;
-      const token = data.token;
-      const password = data.password;
-      if (!email) {
-        throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
-      }
-      if (!token) {
-        throw new HttpException('Token not provided', HttpStatus.UNAUTHORIZED);
-      }
-      if (!password) {
-        throw new HttpException(
-          'Password not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-      return await this.authService.resetPassword({
-        email: email,
-        token: token,
-        password: password,
-      });
-    } catch (error: any) {
-      return {
-        success: false,
-        message: 'Something went wrong',
-      };
-    }
-  }
-
-  @Post('resend-token')
-  @ApiOperation({
-    summary: 'Resend password reset token',
-    description: 'Resend OTP password reset token to email',
-  })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['email'],
-      properties: {
-        email: { type: 'string', format: 'email' },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Reset token resent successfully',
-    schema: {
-      example: {
-        success: true,
-        message: 'We have sent a token code to your email',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Email not found',
-  })
-  @ApiResponse({
-    status: 500,
-    description: 'Failed to send email',
-  })
-  async resendToken(@Body() data: { email: string }) {
-    try {
-      const email = data.email;
-      if (!email) {
-        throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
-      }
-      return await this.authService.resendToken(email);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: 'Failed to resend password reset token',
-      };
-    }
+  @ApiBody({ type: ForgotPasswordDto })
+  async resendOtp(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.resendToken(forgotPasswordDto.email);
   }
 
   @Post('verify-token')
@@ -742,330 +675,6 @@ After registration:
       );
 
       return response;
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiBearerAuth('super_admin-token')
-  @UseGuards(JwtAuthGuard)
-  @Post('logout')
-  @ApiOperation({
-    summary: 'Logout user',
-    description: 'Revoke refresh token and logout authenticated user',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Logout successful',
-    schema: {
-      example: {
-        success: true,
-        message: 'Refresh token revoked successfully',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized or refresh token not found',
-  })
-  async logout(@Req() req: Request) {
-    try {
-      const userId = req.user.userId;
-      const response = await this.authService.revokeRefreshToken(userId);
-      return response;
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @Get('google')
-  @UseGuards(AuthGuard('google'))
-  @ApiOperation({
-    summary: 'Google OAuth login redirect',
-    description: 'Redirect to Google OAuth 2.0 login flow',
-  })
-  @ApiResponse({
-    status: 302,
-    description: 'Redirect to Google OAuth login',
-  })
-  async googleLogin(): Promise<any> {
-    return HttpStatus.OK;
-  }
-
-  @Get('google/redirect')
-  @UseGuards(AuthGuard('google'))
-  @ApiOperation({
-    summary: 'Google OAuth callback',
-    description: 'Handle Google OAuth callback and return user data',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Google OAuth successful',
-    schema: {
-      example: {
-        statusCode: 200,
-        data: {
-          userId: 1,
-          email: 'user@gmail.com',
-          name: 'John Doe',
-        },
-      },
-    },
-  })
-  async googleLoginRedirect(@Req() req: Request): Promise<any> {
-    return {
-      statusCode: HttpStatus.OK,
-      data: req.user,
-    };
-  }
-
-  /*=====================================================
-                    Email Change Section
-  =====================================================*/
-
-  @ApiBearerAuth('super_admin-token')
-  @UseGuards(JwtAuthGuard)
-  @Post('request-email-change')
-  @ApiOperation({
-    summary: 'Request email change',
-    description:
-      'Request to change email address. Sends verification code to new email.',
-  })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['email'],
-      properties: {
-        email: {
-          type: 'string',
-          format: 'email',
-          description: 'New email address',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Email change request sent successfully',
-    schema: {
-      example: {
-        success: true,
-        message: 'We have sent an OTP code to your email',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized or user not found',
-  })
-  async requestEmailChange(
-    @Req() req: Request,
-    @Body() data: { email: string },
-  ) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.requestEmailChange(user_id, data.email);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiBearerAuth('super_admin-token')
-  @UseGuards(JwtAuthGuard)
-  @Post('change-email')
-  @ApiOperation({
-    summary: 'Change email address',
-    description: 'Confirm email change with verification token',
-  })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['new_email', 'token'],
-      properties: {
-        new_email: { type: 'string', format: 'email' },
-        token: { type: 'string', description: 'OTP token sent to new email' },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Email updated successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Invalid token or user not found',
-  })
-  async changeEmail(
-    @Req() req: Request,
-    @Body() data: { new_email: string; token: string },
-  ) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.changeEmail({
-        user_id,
-        new_email: data.new_email,
-        token: data.token,
-      });
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  /*=====================================================
-                Two-Factor Authentication Section
-  =====================================================*/
-
-  @ApiBearerAuth('super_admin-token')
-  @UseGuards(JwtAuthGuard)
-  @Post('generate-2fa-secret')
-  @ApiOperation({
-    summary: 'Generate 2FA secret',
-    description:
-      'Generate a new 2FA secret for user. Returns QR code and backup codes.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '2FA secret generated successfully',
-    schema: {
-      example: {
-        success: true,
-        secret: 'JBSWY3DPEBLW64TMMQ======',
-        qrCode: 'data:image/png;base64,...',
-        backupCodes: ['123456', '234567', '345678'],
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  async generate2FASecret(@Req() req: Request) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.generate2FASecret(user_id);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiBearerAuth('super_admin-token')
-  @UseGuards(JwtAuthGuard)
-  @Post('verify-2fa')
-  @ApiOperation({
-    summary: 'Verify 2FA token',
-    description: 'Verify 2FA token to confirm setup or validate login',
-  })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['token'],
-      properties: {
-        token: {
-          type: 'string',
-          description: 'OTP token from authenticator app',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: '2FA verified successfully',
-    schema: {
-      example: {
-        success: true,
-        message: '2FA verified successfully',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Invalid token',
-  })
-  async verify2FA(@Req() req: Request, @Body() data: { token: string }) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.verify2FA(user_id, data.token);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiBearerAuth('super_admin-token')
-  @UseGuards(JwtAuthGuard)
-  @Post('enable-2fa')
-  @ApiOperation({
-    summary: 'Enable 2FA for user',
-    description: 'Enable two-factor authentication after verification',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '2FA enabled successfully',
-    schema: {
-      example: {
-        success: true,
-        message: '2FA enabled successfully',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized or user not found',
-  })
-  async enable2FA(@Req() req: Request) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.enable2FA(user_id);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  @ApiBearerAuth('super_admin-token')
-  @UseGuards(JwtAuthGuard)
-  @Post('disable-2fa')
-  @ApiOperation({
-    summary: 'Disable 2FA for user',
-    description: 'Disable two-factor authentication for user account',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '2FA disabled successfully',
-    schema: {
-      example: {
-        success: true,
-        message: '2FA disabled successfully',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized or user not found',
-  })
-  async disable2FA(@Req() req: Request) {
-    try {
-      const user_id = req.user.userId;
-      return await this.authService.disable2FA(user_id);
     } catch (error: any) {
       return {
         success: false,

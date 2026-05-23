@@ -340,7 +340,7 @@ async function main() {
   console.log('='.repeat(60));
 
   try {
-    // Step 1: Create Superadmin User
+    // Step 1: Create Superadmin User (NO church membership - superadmin is system-wide)
     console.log('📝 Step 1: Creating superadmin user...');
     const superadminData = {
       first_name: 'System',
@@ -525,6 +525,8 @@ async function main() {
       });
 
       let church;
+      let adminUser;
+
       if (!existingChurch) {
         // Create church and admin user in transaction
         const result = await prisma.$transaction(async (tx) => {
@@ -544,7 +546,7 @@ async function main() {
 
           // Create church admin user
           const hashedPassword = await hashPassword(churchData.adminPassword);
-          const adminUser = await tx.user.create({
+          const newAdminUser = await tx.user.create({
             data: {
               id: randomUUID(),
               first_name:
@@ -557,15 +559,16 @@ async function main() {
               language: 'en',
               type: 'CHURCH_ADMIN',
               status: UserStatus.ACTIVE,
-              email_verified_at: new Date(),
+              email_verified_at: new Date(), // ✅ Ensure email is verified
             },
           });
 
           // Create church membership for admin user
-          const churchMember = await tx.churchMember.create({
+          await tx.churchMember.create({
             data: {
+              id: randomUUID(),
               church_id: newChurch.id,
-              user_id: adminUser.id,
+              user_id: newAdminUser.id,
               church_role: 'Church Admin',
               status: ChurchMemberStatus.ACTIVE,
               joined_at: new Date(),
@@ -578,7 +581,7 @@ async function main() {
           await tx.roleUser.create({
             data: {
               role_id: churchAdminRole.id,
-              user_id: adminUser.id,
+              user_id: newAdminUser.id,
               churchId: newChurch.id,
               assigned_by_id: superadmin.id,
             },
@@ -590,16 +593,106 @@ async function main() {
             data: { church_members: 1 },
           });
 
-          return { church: newChurch, adminUser, churchMember };
+          return { church: newChurch, adminUser: newAdminUser };
         });
 
         church = result.church;
+        adminUser = result.adminUser;
         console.log(
           `✅ Church created: ${churchData.name} with admin user ${churchData.email}`,
         );
       } else {
         church = existingChurch;
         console.log(`✅ Church already exists: ${churchData.name}`);
+
+        // Fix: Check if admin user exists and has membership
+        adminUser = await prisma.user.findFirst({
+          where: { email: churchData.email },
+          include: {
+            church_memberships: {
+              where: { church_id: church.id },
+            },
+          },
+        });
+
+        if (adminUser) {
+          // Check if email is verified
+          if (!adminUser.email_verified_at) {
+            await prisma.user.update({
+              where: { id: adminUser.id },
+              data: { email_verified_at: new Date() },
+            });
+            console.log(`  ✅ Email verified for ${adminUser.email}`);
+          }
+
+          // Check if membership exists
+          const hasMembership = adminUser.church_memberships.length > 0;
+
+          if (!hasMembership) {
+            console.log(
+              `  ⚠️ Missing membership for ${adminUser.email}, creating...`,
+            );
+
+            await prisma.$transaction(async (tx) => {
+              // Create missing membership
+              await tx.churchMember.create({
+                data: {
+                  id: randomUUID(),
+                  church_id: church.id,
+                  user_id: adminUser.id,
+                  church_role: 'Church Admin',
+                  status: ChurchMemberStatus.ACTIVE,
+                  joined_at: new Date(),
+                  approved_by: superadmin.id,
+                  approved_at: new Date(),
+                },
+              });
+
+              // Ensure role is assigned
+              const existingRole = await tx.roleUser.findUnique({
+                where: {
+                  role_id_user_id: {
+                    role_id: churchAdminRole.id,
+                    user_id: adminUser.id,
+                  },
+                },
+              });
+
+              if (!existingRole) {
+                await tx.roleUser.create({
+                  data: {
+                    role_id: churchAdminRole.id,
+                    user_id: adminUser.id,
+                    churchId: church.id,
+                    assigned_by_id: superadmin.id,
+                  },
+                });
+              }
+
+              // Update church member count
+              const memberCount = await tx.churchMember.count({
+                where: {
+                  church_id: church.id,
+                  status: ChurchMemberStatus.ACTIVE,
+                  deleted_at: null,
+                },
+              });
+
+              await tx.church.update({
+                where: { id: church.id },
+                data: { church_members: memberCount },
+              });
+            });
+
+            console.log(
+              `  ✅ Created missing membership for ${adminUser.email}`,
+            );
+          } else {
+            console.log(`  ✅ Admin already has church membership`);
+          }
+        } else {
+          console.log(`  ⚠️ Admin user not found for ${churchData.email}`);
+        }
       }
       createdChurches.set(churchData.name, church);
     }
@@ -748,7 +841,7 @@ async function main() {
               language: 'en',
               type: userData.type,
               status: UserStatus.ACTIVE,
-              email_verified_at: new Date(),
+              email_verified_at: new Date(), // ✅ Ensure email is verified
             },
           });
           console.log(
@@ -758,6 +851,15 @@ async function main() {
           console.log(
             `  ✅ User already exists: ${userData.first_name} ${userData.last_name} (${userData.role})`,
           );
+
+          // Fix: Ensure email is verified for existing users
+          if (!user.email_verified_at) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { email_verified_at: new Date() },
+            });
+            console.log(`  ✅ Email verified for ${user.email}`);
+          }
         }
 
         // Create church membership
@@ -771,6 +873,7 @@ async function main() {
         if (!existingMembership) {
           await prisma.churchMember.create({
             data: {
+              id: randomUUID(),
               church_id: church.id,
               user_id: user.id,
               church_role: userData.church_role,
@@ -828,7 +931,52 @@ async function main() {
       console.log(`  ✅ ${churchName}: ${memberCount} members`);
     }
 
-    // Step 9: Display Summary
+    // Step 9: Verify all CHURCH_ADMIN users have memberships
+    console.log(
+      '\n📝 Step 9: Verifying all CHURCH_ADMIN users have memberships...',
+    );
+    const churchAdmins = await prisma.user.findMany({
+      where: {
+        type: 'CHURCH_ADMIN',
+        status: UserStatus.ACTIVE,
+      },
+      include: {
+        church_memberships: true,
+      },
+    });
+
+    for (const admin of churchAdmins) {
+      if (admin.church_memberships.length === 0) {
+        console.log(`  ⚠️ Admin ${admin.email} has no church membership!`);
+
+        // Find their church
+        const church = await prisma.church.findFirst({
+          where: { church_email: admin.email },
+        });
+
+        if (church) {
+          await prisma.churchMember.create({
+            data: {
+              id: randomUUID(),
+              church_id: church.id,
+              user_id: admin.id,
+              church_role: 'Church Admin',
+              status: ChurchMemberStatus.ACTIVE,
+              joined_at: new Date(),
+              approved_by: superadmin.id,
+              approved_at: new Date(),
+            },
+          });
+          console.log(`  ✅ Created missing membership for ${admin.email}`);
+        }
+      } else {
+        console.log(
+          `  ✅ ${admin.email} has ${admin.church_memberships.length} membership(s)`,
+        );
+      }
+    }
+
+    // Step 10: Display Summary
     console.log('\n' + '='.repeat(60));
     console.log('📊 SEEDING SUMMARY');
     console.log('='.repeat(60));
@@ -846,6 +994,25 @@ async function main() {
 
     const totalRoleAssignments = await prisma.roleUser.count();
     console.log(`✅ Role assignments: ${totalRoleAssignments}`);
+
+    // Verify data integrity
+    const adminsWithoutMembership = await prisma.user.count({
+      where: {
+        type: 'CHURCH_ADMIN',
+        status: UserStatus.ACTIVE,
+        church_memberships: {
+          none: {},
+        },
+      },
+    });
+
+    if (adminsWithoutMembership > 0) {
+      console.log(
+        `\n⚠️ WARNING: ${adminsWithoutMembership} CHURCH_ADMIN(s) without membership!`,
+      );
+    } else {
+      console.log(`\n✅ All CHURCH_ADMIN users have valid church memberships`);
+    }
 
     console.log('\n🎉 Database seeding completed successfully!');
   } catch (error) {

@@ -66,7 +66,7 @@ export function buildSwaggerOptions() {
 export const swaggerUiOptions = {
   swaggerOptions: {
     persistAuthorization: true,
-    defaultModelsExpandDepth: -1,
+    // defaultModelsExpandDepth: -1,
     docExpansion: 'none',
     filter: true,
     showExtensions: true,

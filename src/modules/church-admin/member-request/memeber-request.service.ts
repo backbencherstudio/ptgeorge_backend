@@ -286,7 +286,7 @@ export class ProUserService {
   ) {
     const { approvalType } = approveUserDto;
 
-    // Check if user exists with their church memberships
+    // Check if user exists with their church memberships (include PENDING status)
     const user = await this.prisma.user.findFirst({
       where: {
         id: userId,
@@ -294,14 +294,11 @@ export class ProUserService {
       },
       include: {
         roles_assigned_to_me: {
-          include: {
-            role: true,
-          },
+          include: { role: true },
         },
         church_memberships: {
-          include: {
-            church: true,
-          },
+          where: { deleted_at: null }, // ✅ Include ALL memberships, not just ACTIVE
+          include: { church: true },
         },
       },
     });
@@ -310,19 +307,16 @@ export class ProUserService {
       throw new NotFoundException('User not found');
     }
 
-    // Get the active church membership
-    const activeMembership = user.church_memberships.find(
-      (cm) => cm.status === ChurchMemberStatus.ACTIVE,
-    );
+    // ✅ Get the church membership (could be PENDING or ACTIVE)
+    const membership = user.church_memberships[0]; // Take the first membership
 
-    // Check if user has a church membership
-    if (!activeMembership) {
+    if (!membership) {
       throw new BadRequestException('User is not associated with any church');
     }
 
-    const churchId = activeMembership.church_id;
+    const churchId = membership.church_id;
 
-    // Check if user already has helper or member role
+    // ✅ Check if user already has helper or member role
     const existingRole = user.roles_assigned_to_me.find(
       (ru) =>
         ru.role.name === Role.HELPER || ru.role.name === Role.CHURCH_MEMBER,
@@ -337,6 +331,7 @@ export class ProUserService {
     // Get or create the role
     const roleName =
       approvalType === ApprovalType.HELPER ? Role.HELPER : Role.CHURCH_MEMBER;
+
     let role = await this.prisma.role.findFirst({
       where: {
         name: roleName,
@@ -380,10 +375,11 @@ export class ProUserService {
         },
       });
 
-      // 2. Update church membership
-      const churchMember = await tx.churchMember.update({
-        where: { id: activeMembership.id },
+      // 2. Update church membership (from PENDING to ACTIVE)
+      const updatedMembership = await tx.churchMember.update({
+        where: { id: membership.id },
         data: {
+          status: ChurchMemberStatus.ACTIVE, // ✅ Change from PENDING to ACTIVE
           church_role: roleName === Role.HELPER ? 'Helper' : 'Member',
           approved_by: adminId,
           approved_at: new Date(),
@@ -394,7 +390,10 @@ export class ProUserService {
       // 3. Update user status from PENDING to ACTIVE
       await tx.user.update({
         where: { id: userId },
-        data: { status: UserStatus.ACTIVE },
+        data: {
+          status: UserStatus.ACTIVE,
+          approved_at: new Date(),
+        },
       });
 
       // 4. Update church member count
@@ -411,7 +410,7 @@ export class ProUserService {
         data: { church_members: memberCount },
       });
 
-      return { churchMember };
+      return { membership: updatedMembership };
     });
 
     // Create notification for the user
@@ -425,14 +424,16 @@ export class ProUserService {
         first_name: true,
         last_name: true,
         email: true,
+        phone_number: true,
         type: true,
         status: true,
+        approved_at: true,
       },
     });
 
     return {
       success: true,
-      message: `User approved as ${roleName.toLowerCase()} successfully and added to church members`,
+      message: `User approved as ${roleName.toLowerCase()} successfully`,
       data: {
         user: updatedUser,
         role: {
@@ -441,10 +442,13 @@ export class ProUserService {
           title: role.title,
         },
         church_membership: {
-          id: result.churchMember.id,
-          status: result.churchMember.status,
-          role: result.churchMember.church_role,
-          joined_at: result.churchMember.joined_at,
+          id: result.membership.id,
+          church_id: churchId,
+          church_name: membership.church?.church_name,
+          status: result.membership.status,
+          role: result.membership.church_role,
+          joined_at: result.membership.joined_at,
+          approved_at: result.membership.approved_at,
         },
       },
     };

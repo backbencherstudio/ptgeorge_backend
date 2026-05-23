@@ -5,11 +5,14 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+
 import {
   PERMISSION_KEY,
   RequiredPermission,
 } from '../decorators/require-permission.decorator';
+
 import { PrismaService } from 'src/prisma/prisma.service';
+import { IS_PUBLIC_KEY } from 'src/common/guard/role/public.decorator';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -19,6 +22,16 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // ✅ Skip permission check for public routes
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
     // 1. Read what permission this route requires
     const required = this.reflector.getAllAndOverride<RequiredPermission>(
       PERMISSION_KEY,
@@ -26,16 +39,24 @@ export class PermissionsGuard implements CanActivate {
     );
 
     // No @RequirePermission decorator → allow through
-    if (!required) return true;
+    if (!required) {
+      return true;
+    }
 
-    // 2. Get the authenticated user from JWT (attached by JwtAuthGuard)
-    const { user } = context.switchToHttp().getRequest();
-    if (!user) throw new ForbiddenException('User not authenticated');
+    // 2. Get authenticated user
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
 
-    // 3. SUPER_ADMIN bypasses all permission checks
-    if (user.type === 'SUPER_ADMIN') return true;
+    if (!user) {
+      throw new ForbiddenException('User not authenticated');
+    }
 
-    // 4. Load all permissions assigned to this user through their roles
+    // 3. SUPER_ADMIN bypass
+    if (user.type === 'SUPER_ADMIN') {
+      return true;
+    }
+
+    // 4. Load permissions
     const roleUsers = await this.prisma.roleUser.findMany({
       where: { user_id: user.userId },
       include: {
@@ -57,12 +78,12 @@ export class PermissionsGuard implements CanActivate {
       },
     });
 
-    // 5. Flatten all permissions across all roles
+    // 5. Flatten permissions
     const allPermissions = roleUsers.flatMap((ru) =>
       ru.role.permission_roles.map((pr) => pr.permission),
     );
 
-    // 6. Check action + category both match, and permission is ACTIVE
+    // 6. Match permission
     const hasPermission = allPermissions.some(
       (p) =>
         p.status === 'ACTIVE' &&

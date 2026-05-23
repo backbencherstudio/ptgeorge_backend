@@ -20,7 +20,7 @@ import {
 import { PermissionsService } from './permissions.service';
 import {
   CreatePermissionDto,
-  PERMISSION_SUBJECTS,
+  PERMISSION_CATEGORIES,
   PermissionAction,
 } from './dto/create-permission.dto';
 import { UpdatePermissionDto } from './dto/update-permission.dto';
@@ -49,7 +49,7 @@ export class PermissionsController {
 Example: action=\`manage\` + category=\`Church\` → key=\`manage_church\`
 
 **Fixed action values:** ${Object.values(PermissionAction).join(' | ')}  
-**Fixed category values:** ${PERMISSION_SUBJECTS.join(' | ')}`,
+**Fixed category values:** ${PERMISSION_CATEGORIES.join(' | ')}`,
   })
   @ApiBody({
     type: CreatePermissionDto,

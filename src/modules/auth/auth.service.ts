@@ -32,6 +32,7 @@ import { ChurchLoginDto } from './dto/login-church.dto';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto, UnifiedLoginDto } from './dto/create-user.dto';
 import { Role } from 'src/common/guard/role/role.enum';
+import { ForgotPasswordDto, ResetPasswordDto, VerifyOtpDto } from './dto/forgot-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -476,32 +477,101 @@ export class AuthService {
     image?: Express.Multer.File,
   ) {
     try {
+      // Check if user exists
+      const existingUser = await this.prisma.user.findUnique({
+        where: { id: userId, deleted_at: null },
+      });
+
+      if (!existingUser) {
+        return {
+          success: false,
+          message: 'User not found',
+        };
+      }
+
+      // Prepare update data
       const data: any = {};
 
-      if (updateUserDto.name) data.name = updateUserDto.name;
-
+      // Personal information
       if (updateUserDto.first_name) data.first_name = updateUserDto.first_name;
-
       if (updateUserDto.last_name) data.last_name = updateUserDto.last_name;
+      if (updateUserDto.address_line1)
+        data.address_line1 = updateUserDto.address_line1;
+      if (updateUserDto.address_line2)
+        data.address_line2 = updateUserDto.address_line2;
+      if (updateUserDto.phone_number)
+        data.phone_number = updateUserDto.phone_number;
+      if (updateUserDto.language) data.language = updateUserDto.language;
 
-      if (updateUserDto.address) data.address = updateUserDto.address;
+      // Professional information (if PRO_USER)
+      if (existingUser.type === 'PRO_USER') {
+        if (updateUserDto.company_name)
+          data.company_name = updateUserDto.company_name;
+        if (updateUserDto.business_email)
+          data.business_email = updateUserDto.business_email;
+        if (updateUserDto.business_phone)
+          data.business_phone = updateUserDto.business_phone;
+        if (updateUserDto.service) data.service = updateUserDto.service;
+        if (updateUserDto.category) data.category = updateUserDto.category;
+        if (updateUserDto.profession)
+          data.profession = updateUserDto.profession;
+        if (updateUserDto.website) data.website = updateUserDto.website;
+        if (updateUserDto.whatsapp_number)
+          data.whatsapp_number = updateUserDto.whatsapp_number;
+        if (updateUserDto.available_time)
+          data.available_time = updateUserDto.available_time;
+        if (updateUserDto.address_line1)
+          data.address_line1 = updateUserDto.address_line1;
+        if (updateUserDto.address_line2)
+          data.address_line2 = updateUserDto.address_line2;
+        if (updateUserDto.state) data.state = updateUserDto.state;
+        if (updateUserDto.country) data.country = updateUserDto.country;
+        if (updateUserDto.zip_code) data.zip_code = updateUserDto.zip_code;
+        if (updateUserDto.description)
+          data.description = updateUserDto.description;
+      }
 
-      if (updateUserDto.type) data.type = updateUserDto.type;
-
+      // Handle image upload
       if (image) {
-        // delete old image from storage
-        const oldImage = await this.prisma.user.findFirst({
-          where: { id: userId },
-          select: { avatar: true },
-        });
-        if (oldImage.avatar) {
-          await TanvirStorage.delete(
-            appConfig().storageUrl.avatar + '/' + oldImage.avatar,
-          );
+        // Validate file type
+        const allowedMimes = [
+          'image/jpeg',
+          'image/png',
+          'image/jpg',
+          'image/webp',
+        ];
+        if (!allowedMimes.includes(image.mimetype)) {
+          return {
+            success: false,
+            message:
+              'Invalid file type. Only JPEG, PNG, and WEBP images are allowed.',
+          };
         }
 
-        // upload file
-        const fileName = `${StringHelper.randomString()}_${image.originalname}`;
+        // Validate file size (5MB)
+        if (image.size > 5 * 1024 * 1024) {
+          return {
+            success: false,
+            message: 'Image size must be less than 5MB',
+          };
+        }
+
+        // Delete old image from storage if exists
+        if (existingUser.avatar) {
+          try {
+            await TanvirStorage.delete(
+              appConfig().storageUrl.avatar + '/' + existingUser.avatar,
+            );
+          } catch (deleteError) {
+            console.error('Failed to delete old avatar:', deleteError);
+            // Continue even if delete fails
+          }
+        }
+
+        // Generate unique filename and upload
+        const fileExtension = image.originalname.split('.').pop();
+        const fileName = `${StringHelper.randomString()}_${Date.now()}.${fileExtension}`;
+
         await TanvirStorage.put(
           appConfig().storageUrl.avatar + '/' + fileName,
           image.buffer,
@@ -510,105 +580,168 @@ export class AuthService {
         data.avatar = fileName;
       }
 
-      const user = await this.userRepository.getUserDetails(userId);
-      if (user) {
-        await this.prisma.user.update({
-          where: { id: userId },
-          data: {
-            ...data,
-          },
-        });
+      // Update user
+      const updatedUser = await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          ...data,
+          updated_at: new Date(),
+        },
+        select: {
+          id: true,
+          name: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          phone_number: true,
+          address: true,
+          avatar: true,
+          language: true,
+          type: true,
+          status: true,
+          updated_at: true,
+        },
+      });
 
-        return {
-          success: true,
-          message: 'User updated successfully',
-        };
-      } else {
-        return {
-          success: false,
-          message: 'User not found',
-        };
-      }
+      // Add avatar URL to response
+      const responseData = {
+        ...updatedUser,
+        avatar_url: updatedUser.avatar
+          ? TanvirStorage.url(
+              appConfig().storageUrl.avatar + '/' + updatedUser.avatar,
+            )
+          : null,
+      };
+
+      return {
+        success: true,
+        message: 'User updated successfully',
+        data: responseData,
+      };
     } catch (error: any) {
+      console.error('Update user error:', error);
       return {
         success: false,
-        message: error.message,
+        message: error.message || 'Failed to update user',
       };
     }
   }
 
   // done
-  async forgotPassword(email) {
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
     try {
+      const { email } = forgotPasswordDto;
+
       const user = await this.userRepository.exist({
         field: 'email',
         value: email,
       });
 
-      if (user) {
-        const token = await this.ucodeRepository.createToken({
-          userId: user.id,
-          isOtp: true,
-        });
-
-        await this.mailService.sendOtpCodeToEmail({
-          email: email,
-          name: user.name,
-          otp: token,
-        });
-
-        return {
-          success: true,
-          message: 'We have sent an OTP code to your email',
-        };
-      } else {
+      if (!user) {
         return {
           success: false,
           message: 'Email not found',
         };
       }
+
+      // Delete any existing unused OTPs for this email
+      await this.ucodeRepository.deleteExpiredTokens(email);
+
+      // Create new OTP token
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await this.prisma.ucode.create({
+        data: {
+          user_id: user.id,
+          token: otpCode,
+          email: email,
+          expired_at: expiresAt,
+          status: 1,
+        },
+      });
+
+      // Send OTP email
+      await this.mailService.sendOtpCodeToEmail({
+        email: email,
+        name: user.first_name || user.name || 'User',
+        otp: otpCode,
+      });
+
+      return {
+        success: true,
+        message: 'OTP sent to your email. It will expire in 10 minutes.',
+        data: {
+          email: email,
+          expires_in: 600, // 10 minutes in seconds
+        },
+      };
     } catch (error: any) {
       return {
         success: false,
-        message: error.message,
+        message: error.message || 'Failed to send OTP',
       };
     }
   }
 
-  // done
-  async resendToken(email: string) {
+  async verifyResetOtp(verifyOtpDto: VerifyOtpDto) {
     try {
-      const user = await this.userRepository.getUserByEmail(email);
+      const { email, otp } = verifyOtpDto;
 
-      if (user) {
-        // create otp code
-        const token = await this.ucodeRepository.createToken({
-          userId: user.id,
-          isOtp: true,
-          time: 2,
-        });
+      const user = await this.userRepository.exist({
+        field: 'email',
+        value: email,
+      });
 
-        // send otp code to email
-        await this.mailService.sendOtpCodeToEmail({
-          email: email,
-          name: user.name,
-          otp: token,
-        });
-
-        return {
-          success: true,
-          message: 'We have sent a token code to your email',
-        };
-      } else {
+      if (!user) {
         return {
           success: false,
           message: 'Email not found',
         };
       }
+
+      // Validate OTP
+      const validOtp = await this.ucodeRepository.verifyToken({
+        email: email,
+        token: otp,
+      });
+
+      if (!validOtp || !validOtp.success) {
+        return {
+          success: false,
+          message: validOtp?.message || 'Invalid or expired OTP',
+        };
+      }
+
+      // Generate a secure reset token (JWT or random string)
+      const resetToken = StringHelper.randomString(32) + Date.now();
+
+      // Store reset token in Redis with 15 minutes expiry
+      await this.redis.setex(
+        `password_reset:${email}`,
+        900, // 15 minutes
+        resetToken,
+      );
+
+      // Mark OTP as used
+      await this.ucodeRepository.deleteToken({
+        email: email,
+        token: otp,
+      });
+
+      return {
+        success: true,
+        message: 'OTP verified successfully',
+        data: {
+          reset_token: resetToken,
+          email: email,
+          expires_in: 900,
+        },
+      };
     } catch (error: any) {
       return {
         success: false,
-        message: error.message,
+        message: error.message || 'Failed to verify OTP',
       };
     }
   }
@@ -645,6 +778,138 @@ export class AuthService {
           message: 'Email not found',
         };
       }
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  // Forgot password - Step 3: Reset password using reset token
+  async resetPasswordWithToken(resetPasswordDto: ResetPasswordDto) {
+    try {
+      const { email, reset_token, new_password, confirm_password } =
+        resetPasswordDto;
+
+      // Validate passwords match
+      if (new_password !== confirm_password) {
+        return {
+          success: false,
+          message: 'Passwords do not match',
+        };
+      }
+
+      // Validate password strength
+      if (new_password.length < 8) {
+        return {
+          success: false,
+          message: 'Password must be at least 8 characters',
+        };
+      }
+
+      // Check if user exists
+      const user = await this.userRepository.exist({
+        field: 'email',
+        value: email,
+      });
+
+      if (!user) {
+        return {
+          success: false,
+          message: 'Email not found',
+        };
+      }
+
+      // Verify reset token from Redis
+      const storedToken = await this.redis.get(`password_reset:${email}`);
+
+      if (!storedToken || storedToken !== reset_token) {
+        return {
+          success: false,
+          message: 'Invalid or expired reset token. Please request a new OTP.',
+        };
+      }
+
+      // Update password
+      await this.userRepository.changePassword({
+        email: email,
+        password: new_password,
+      });
+
+      // Delete the used reset token
+      await this.redis.del(`password_reset:${email}`);
+
+      // // Send password change confirmation email
+      // try {
+      //   await this.mailService.sendPasswordChangedEmail({
+      //     email: email,
+      //     name: user.first_name || user.name || 'User',
+      //   });
+      // } catch (emailError) {
+      //   console.error(
+      //     'Failed to send password change confirmation:',
+      //     emailError,
+      //   );
+      //   // Don't fail the request if email fails
+      // }
+
+      return {
+        success: true,
+        message:
+          'Password changed successfully. You can now login with your new password.',
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || 'Failed to reset password',
+      };
+    }
+  }
+
+  async resendToken(email: string) {
+    try {
+      const user = await this.userRepository.getUserByEmail(email);
+
+      if (!user) {
+        return {
+          success: false,
+          message: 'Email not found',
+        };
+      }
+
+      // Delete existing unused OTPs
+      await this.ucodeRepository.deleteExpiredTokens(email);
+
+      // Create new OTP
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await this.prisma.ucode.create({
+        data: {
+          user_id: user.id,
+          token: otpCode,
+          email: email,
+          expired_at: expiresAt,
+          status: 1,
+        },
+      });
+
+      // Send OTP email
+      await this.mailService.sendOtpCodeToEmail({
+        email: email,
+        name: user.first_name || user.name || 'User',
+        otp: otpCode,
+      });
+
+      return {
+        success: true,
+        message: 'New OTP sent to your email',
+        data: {
+          email: email,
+          expires_in: 600,
+        },
+      };
     } catch (error: any) {
       return {
         success: false,
@@ -723,55 +988,6 @@ export class AuthService {
           success: true,
           message: 'We have sent a verification code to your email',
         };
-      } else {
-        return {
-          success: false,
-          message: 'Email not found',
-        };
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  async resetPassword({ email, token, password }) {
-    try {
-      const user = await this.userRepository.exist({
-        field: 'email',
-        value: email,
-      });
-
-      if (user) {
-        const existToken = await this.ucodeRepository.verifycheckToken({
-          email: email,
-          token: token,
-        });
-
-        if (existToken) {
-          await this.userRepository.changePassword({
-            email: email,
-            password: password,
-          });
-
-          // delete otp code
-          await this.ucodeRepository.deleteToken({
-            email: email,
-            token: token,
-          });
-
-          return {
-            success: true,
-            message: 'Password updated successfully',
-          };
-        } else {
-          return {
-            success: false,
-            message: 'Invalid token',
-          };
-        }
       } else {
         return {
           success: false,
@@ -1066,95 +1282,6 @@ export class AuthService {
     }
   }
 
-  async requestEmailChange(user_id: string, email: string) {
-    try {
-      const user = await this.userRepository.getUserDetails(user_id);
-      if (user) {
-        const token = await this.ucodeRepository.createToken({
-          userId: user.id,
-          isOtp: true,
-          email: email,
-        });
-
-        await this.mailService.sendOtpCodeToEmail({
-          email: email,
-          name: email,
-          otp: token,
-        });
-
-        return {
-          success: true,
-          message: 'We have sent an OTP code to your email',
-        };
-      } else {
-        return {
-          success: false,
-          message: 'User not found',
-        };
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  async changeEmail({
-    user_id,
-    new_email,
-    token,
-  }: {
-    user_id: string;
-    new_email: string;
-    token: string;
-  }) {
-    try {
-      const user = await this.userRepository.getUserDetails(user_id);
-
-      if (user) {
-        const existToken = await this.ucodeRepository.validateToken({
-          email: new_email,
-          token: token,
-          forEmailChange: true,
-        });
-
-        if (existToken) {
-          await this.userRepository.changeEmail({
-            user_id: user.id,
-            new_email: new_email,
-          });
-
-          // delete otp code
-          await this.ucodeRepository.deleteToken({
-            email: new_email,
-            token: token,
-          });
-
-          return {
-            success: true,
-            message: 'Email updated successfully',
-          };
-        } else {
-          return {
-            success: false,
-            message: 'Invalid token',
-          };
-        }
-      } else {
-        return {
-          success: false,
-          message: 'User not found',
-        };
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
   async validateUser(
     email: string,
     pass: string,
@@ -1198,84 +1325,4 @@ export class AuthService {
       throw new UnauthorizedException('Email not found');
     }
   }
-
-  // --------- 2FA ---------
-  async generate2FASecret(user_id: string) {
-    try {
-      return await this.userRepository.generate2FASecret(user_id);
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  async verify2FA(user_id: string, token: string) {
-    try {
-      const isValid = await this.userRepository.verify2FA(user_id, token);
-      if (!isValid) {
-        return {
-          success: false,
-          message: 'Invalid token',
-        };
-      }
-      return {
-        success: true,
-        message: '2FA verified successfully',
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  async enable2FA(user_id: string) {
-    try {
-      const user = await this.userRepository.getUserDetails(user_id);
-      if (user) {
-        await this.userRepository.enable2FA(user_id);
-        return {
-          success: true,
-          message: '2FA enabled successfully',
-        };
-      } else {
-        return {
-          success: false,
-          message: 'User not found',
-        };
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
-  async disable2FA(user_id: string) {
-    try {
-      const user = await this.userRepository.getUserDetails(user_id);
-      if (user) {
-        await this.userRepository.disable2FA(user_id);
-        return {
-          success: true,
-          message: '2FA disabled successfully',
-        };
-      } else {
-        return {
-          success: false,
-          message: 'User not found',
-        };
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-  // --------- end 2FA ---------
 }

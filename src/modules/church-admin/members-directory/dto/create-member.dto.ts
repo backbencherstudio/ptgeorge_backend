@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   MinLength,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateMemberDto {
@@ -39,26 +40,22 @@ export class CreateMemberDto {
   })
   @IsOptional()
   @IsString()
+  @MinLength(8)
   password?: string;
 
-  @ApiPropertyOptional({
-    example: 'CHURCH_MEMBER',
-    description: 'System role name',
+  @ApiProperty({
+    example: 'cm6abcdef12345',
+    description: 'Role ID from Role model',
+    required: true,
   })
-  @IsOptional()
-  @IsString()
-  role_name?: string;
+  @IsUUID()
+  @IsNotEmpty()
+  role_id: string;
 
   @ApiPropertyOptional({
-    example: 'Member',
-    description: 'Role within the church',
+    description: 'Church ID - Required for SUPER_ADMIN',
   })
   @IsOptional()
-  @IsString()
-  church_role?: string;
-
-  @ApiPropertyOptional({ description: 'Church ID (required for super admin)' })
-  @IsOptional()
-  @IsString()
+  @IsUUID()
   church_id?: string;
 }

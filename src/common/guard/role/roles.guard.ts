@@ -1,47 +1,57 @@
 import {
+  Injectable,
   CanActivate,
   ExecutionContext,
-  HttpException,
-  HttpStatus,
-  Injectable,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+
 import { ROLES_KEY } from './roles.decorator';
-import { Role } from './role.enum';
-import { UserRepository } from '../../../common/repository/user/user.repository';
+import { IS_PUBLIC_KEY } from './public.decorator';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(
-    private reflector: Reflector,
-    private userRepository: UserRepository,
-  ) {}
+  constructor(private reflector: Reflector) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
+  canActivate(context: ExecutionContext): boolean {
+    // ✅ Public route bypass
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
-    if (!requiredRoles) {
+    if (isPublic) {
       return true;
     }
 
-    const { user } = context.switchToHttp().getRequest();
+    // ✅ Required roles
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
-    const userDetails = await this.userRepository.getUserDetails(user.userId);
-
-    if (!userDetails) {
-      return false;
+    if (!requiredRoles || requiredRoles.length === 0) {
+      return true;
     }
 
-    if (requiredRoles.some((role) => userDetails.type?.includes(role))) {
-      return true;
-    } else {
-      throw new HttpException(
-        'You do not have permission to access this resource',
-        HttpStatus.FORBIDDEN,
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    if (!user) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    // ✅ IMPORTANT FIX
+    const userRole = user.type;
+
+    const hasRole = requiredRoles.includes(userRole);
+
+    if (!hasRole) {
+      throw new ForbiddenException(
+        `Access denied. Required roles: ${requiredRoles.join(', ')}`,
       );
     }
+
+    return true;
   }
 }

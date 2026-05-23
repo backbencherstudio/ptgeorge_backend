@@ -125,8 +125,8 @@ export class RolesController {
     return this.rolesService.toggleStatus(id);
   }
 
-  // ─── POST /roles/:id/permissions ─────────────────────────────────────────────
-  @Post(':id/permissions')
+  // ─── PATCH /roles/:id/permissions ─────────────────────────────────────────────
+  @Patch(':id/permissions')
   @ApiOperation({
     summary: 'Assign permissions to a role',
     description:

@@ -27,18 +27,19 @@ import { PermissionsGuard } from 'src/modules/auth/guards/permissions.guard';
 import { Role } from 'src/common/guard/role/role.enum';
 import { RequirePermission } from 'src/modules/auth/decorators/require-permission.decorator';
 import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
+import { Public } from 'src/common/guard/role/public.decorator';
 
 @ApiTags('Churches')
 @ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 @Controller('churches')
-@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard) 
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles(Role.SUPER_ADMIN)
 export class ChurchesController {
   constructor(private readonly service: ChurchesService) {}
 
   @Get()
+  @Public()
   @ApiOperation({ summary: 'Get all churches with pagination and search' })
-  @RequirePermission('read', 'Church')
   getAll(@Query() query: QueryChurchDto) {
     return this.service.findAll(query);
   }

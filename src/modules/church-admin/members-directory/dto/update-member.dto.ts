@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsEmail, IsIn } from 'class-validator';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class UpdateMemberDto {
   @ApiPropertyOptional({ example: 'John' })
@@ -14,7 +14,7 @@ export class UpdateMemberDto {
 
   @ApiPropertyOptional({ example: 'john@example.com' })
   @IsOptional()
-  @IsEmail()
+  @IsString()
   email?: string;
 
   @ApiPropertyOptional({ example: '+1234567890' })
@@ -22,23 +22,21 @@ export class UpdateMemberDto {
   @IsString()
   phone_number?: string;
 
-  @ApiPropertyOptional({ enum: ['active', 'inactive'] })
+  @ApiPropertyOptional({ example: 'active', enum: ['active', 'suspended'] })
   @IsOptional()
   @IsString()
   status?: string;
 
-  @ApiPropertyOptional({ example: 'PASTOR' })
+  @ApiPropertyOptional({
+    example: 'cm6abcdef12345',
+    description: 'Role ID to assign',
+  })
   @IsOptional()
-  @IsString()
-  role_name?: string;
-
-  @ApiPropertyOptional({ example: 'Leader' })
-  @IsOptional()
-  @IsString()
-  church_role?: string;
+  @IsUUID()
+  role_id?: string;
 
   @ApiPropertyOptional({ description: 'Church ID (for super admin)' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   church_id?: string;
 }

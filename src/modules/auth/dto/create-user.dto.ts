@@ -6,7 +6,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsPhoneNumber,
   IsUrl,
   MinLength,
   ValidateIf,
@@ -137,7 +136,7 @@ export class CreateUserDto {
     description: 'Business phone number (required for PRO_USER)',
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
-  @IsPhoneNumber()
+  @IsString()
   @IsNotEmpty({
     message: 'Business phone number is required for professional account',
   })
@@ -185,7 +184,7 @@ export class CreateUserDto {
   })
   @ValidateIf((o) => o.type === UserType.PRO_USER)
   @IsOptional()
-  @IsPhoneNumber()
+  @IsString()
   whatsapp_number?: string;
 
   @ApiPropertyOptional({

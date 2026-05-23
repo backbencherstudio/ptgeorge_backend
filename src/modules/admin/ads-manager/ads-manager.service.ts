@@ -748,6 +748,9 @@ export class AdsService {
           location_display: this.formatLocationDisplay(ad.country, ad.city),
           total_views: ad.total_views,
           total_clicks: ad.total_clicks,
+          created_at: ad.created_at,
+          status: ad.status,
+          placement: ad.placement,
           ctr:
             ad.total_views > 0
               ? Number(((ad.total_clicks / ad.total_views) * 100).toFixed(2))
@@ -960,8 +963,10 @@ export class AdsService {
           description: ad.description,
           location_display: this.formatLocationDisplay(ad.country, ad.city),
           thumbnail_url: this.getFullUrl(ad.thumbnail),
-          link: ad.link,
+          created_at: ad.created_at,
+          status: ad.status,
           placement: ad.placement,
+          link: ad.link,
         })),
       };
     } catch (error) {

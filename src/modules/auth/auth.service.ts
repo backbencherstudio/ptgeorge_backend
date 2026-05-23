@@ -474,149 +474,142 @@ export class AuthService {
   async updateUser(
     userId: string,
     updateUserDto: UpdateUserDto,
+    currentUserId: string,
     image?: Express.Multer.File,
   ) {
     try {
+      // Validation
+      if (!currentUserId) {
+        return { success: false, message: 'Authentication required' };
+      }
+
       // Check if user exists
-      const existingUser = await this.prisma.user.findUnique({
+      const existingUser = await this.prisma.user.findFirst({
         where: { id: userId, deleted_at: null },
       });
 
       if (!existingUser) {
+        return { success: false, message: 'User not found' };
+      }
+
+      // Permission check: Only SUPER_ADMIN or the user themselves can update
+      const isSuperAdmin =
+        existingUser.type === 'SUPER_ADMIN' && currentUserId === userId;
+      const isSelfUpdate = userId === currentUserId;
+
+      if (!isSuperAdmin && !isSelfUpdate) {
         return {
           success: false,
-          message: 'User not found',
+          message: 'You do not have permission to update this user',
         };
       }
 
-      // Prepare update data
+      // Prepare update data (only include fields that are provided)
       const data: any = {};
 
-      // Personal information
-      if (updateUserDto.first_name) data.first_name = updateUserDto.first_name;
-      if (updateUserDto.last_name) data.last_name = updateUserDto.last_name;
-      if (updateUserDto.address_line1)
-        data.address_line1 = updateUserDto.address_line1;
-      if (updateUserDto.address_line2)
-        data.address_line2 = updateUserDto.address_line2;
-      if (updateUserDto.phone_number)
-        data.phone_number = updateUserDto.phone_number;
-      if (updateUserDto.language) data.language = updateUserDto.language;
+      // Map DTO fields to database fields
+      const fieldMappings = {
+        first_name: 'first_name',
+        last_name: 'last_name',
+        phone_number: 'phone_number',
+        language: 'language',
+        address_line1: 'address_line1',
+        address_line2: 'address_line2',
+        state: 'state',
+        country: 'country',
+        zip_code: 'zip_code',
+        company_name: 'company_name',
+        business_email: 'business_email',
+        business_phone: 'business_phone',
+        service: 'service',
+        category: 'category',
+        profession: 'profession',
+        website: 'website',
+        whatsapp_number: 'whatsapp_number',
+        available_time: 'available_time',
+        description: 'description',
+      };
 
-      // Professional information (if PRO_USER)
-      if (existingUser.type === 'PRO_USER') {
-        if (updateUserDto.company_name)
-          data.company_name = updateUserDto.company_name;
-        if (updateUserDto.business_email)
-          data.business_email = updateUserDto.business_email;
-        if (updateUserDto.business_phone)
-          data.business_phone = updateUserDto.business_phone;
-        if (updateUserDto.service) data.service = updateUserDto.service;
-        if (updateUserDto.category) data.category = updateUserDto.category;
-        if (updateUserDto.profession)
-          data.profession = updateUserDto.profession;
-        if (updateUserDto.website) data.website = updateUserDto.website;
-        if (updateUserDto.whatsapp_number)
-          data.whatsapp_number = updateUserDto.whatsapp_number;
-        if (updateUserDto.available_time)
-          data.available_time = updateUserDto.available_time;
-        if (updateUserDto.address_line1)
-          data.address_line1 = updateUserDto.address_line1;
-        if (updateUserDto.address_line2)
-          data.address_line2 = updateUserDto.address_line2;
-        if (updateUserDto.state) data.state = updateUserDto.state;
-        if (updateUserDto.country) data.country = updateUserDto.country;
-        if (updateUserDto.zip_code) data.zip_code = updateUserDto.zip_code;
-        if (updateUserDto.description)
-          data.description = updateUserDto.description;
+      // Only add fields that exist in updateUserDto
+      for (const [dtoField, dbField] of Object.entries(fieldMappings)) {
+        if (updateUserDto[dtoField] !== undefined) {
+          data[dbField] = updateUserDto[dtoField];
+        }
       }
 
       // Handle image upload
       if (image) {
-        // Validate file type
-        const allowedMimes = [
-          'image/jpeg',
-          'image/png',
-          'image/jpg',
-          'image/webp',
-        ];
-        if (!allowedMimes.includes(image.mimetype)) {
-          return {
-            success: false,
-            message:
-              'Invalid file type. Only JPEG, PNG, and WEBP images are allowed.',
-          };
-        }
-
-        // Validate file size (5MB)
-        if (image.size > 5 * 1024 * 1024) {
-          return {
-            success: false,
-            message: 'Image size must be less than 5MB',
-          };
-        }
-
-        // Delete old image from storage if exists
+        // Delete old image if exists
         if (existingUser.avatar) {
           try {
             await TanvirStorage.delete(
-              appConfig().storageUrl.avatar + '/' + existingUser.avatar,
+              `${appConfig().storageUrl.avatar}/${existingUser.avatar}`,
             );
-          } catch (deleteError) {
-            console.error('Failed to delete old avatar:', deleteError);
-            // Continue even if delete fails
+          } catch (error) {
+            console.error('Failed to delete old avatar:', error);
           }
         }
 
-        // Generate unique filename and upload
+        // Upload new image
         const fileExtension = image.originalname.split('.').pop();
-        const fileName = `${StringHelper.randomString()}_${Date.now()}.${fileExtension}`;
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
 
         await TanvirStorage.put(
-          appConfig().storageUrl.avatar + '/' + fileName,
+          `${appConfig().storageUrl.avatar}/${fileName}`,
           image.buffer,
         );
-
         data.avatar = fileName;
+      }
+
+      // If no data to update
+      if (Object.keys(data).length === 0 && !image) {
+        return { success: false, message: 'No data to update' };
       }
 
       // Update user
       const updatedUser = await this.prisma.user.update({
         where: { id: userId },
-        data: {
-          ...data,
-          updated_at: new Date(),
-        },
+        data: { ...data, updated_at: new Date() },
         select: {
           id: true,
-          name: true,
           first_name: true,
           last_name: true,
           email: true,
           phone_number: true,
-          address: true,
           avatar: true,
           language: true,
           type: true,
           status: true,
+          address_line1: true,
+          address_line2: true,
+          state: true,
+          country: true,
+          zip_code: true,
+          company_name: true,
+          business_email: true,
+          business_phone: true,
+          service: true,
+          category: true,
+          profession: true,
+          website: true,
+          whatsapp_number: true,
+          available_time: true,
+          description: true,
           updated_at: true,
         },
       });
 
-      // Add avatar URL to response
-      const responseData = {
-        ...updatedUser,
-        avatar_url: updatedUser.avatar
-          ? TanvirStorage.url(
-              appConfig().storageUrl.avatar + '/' + updatedUser.avatar,
-            )
-          : null,
-      };
-
       return {
         success: true,
         message: 'User updated successfully',
-        data: responseData,
+        data: {
+          ...updatedUser,
+          avatar_url: updatedUser.avatar
+            ? TanvirStorage.url(
+                `${appConfig().storageUrl.avatar}/${updatedUser.avatar}`,
+              )
+            : null,
+        },
       };
     } catch (error: any) {
       console.error('Update user error:', error);
@@ -1324,5 +1317,19 @@ export class AuthService {
     } else {
       throw new UnauthorizedException('Email not found');
     }
+  }
+
+  private async isSuperAdmin(userId: string): Promise<boolean> {
+    // Return false if userId is not provided
+    if (!userId) {
+      return false;
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId },
+      select: { type: true },
+    });
+
+    return user?.type === 'SUPER_ADMIN';
   }
 }

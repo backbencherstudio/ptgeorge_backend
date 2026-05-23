@@ -475,6 +475,7 @@ async function main() {
       password: await hashPassword(appConfig().defaultUser.system.password),
       phone_number: '+1234567890',
       church_name: 'System Administration',
+      role: Role.SUPER_ADMIN,
       language: 'en',
       type: 'SUPER_ADMIN' as const,
       status: UserStatus.ACTIVE,

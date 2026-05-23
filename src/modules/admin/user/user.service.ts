@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UserRepository } from '../../../common/repository/user/user.repository';
@@ -230,8 +231,17 @@ export class UserService {
     const { church_id, type, status, search, page = 1, limit = 10 } = filters;
     const skip = (page - 1) * limit;
 
-    const currentUser = await this.prisma.user.findUnique({
-      where: { id: currentUserId, deleted_at: null },
+    // Check if userId is provided
+    if (!currentUserId) {
+      throw new UnauthorizedException('User ID is required');
+    }
+
+    // Use findFirst instead of findUnique to include deleted_at filter
+    const currentUser = await this.prisma.user.findFirst({
+      where: {
+        id: currentUserId,
+        deleted_at: null,
+      },
       include: {
         roles_assigned_to_me: { include: { role: true } },
         church_memberships: {
@@ -242,7 +252,7 @@ export class UserService {
     });
 
     if (!currentUser) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('User not found or account deactivated');
     }
 
     const isSuperAdmin = currentUser.type === UserType.SUPER_ADMIN;
@@ -295,8 +305,8 @@ export class UserService {
           },
           church_memberships: {
             where: effectiveChurchId
-              ? { church_id: effectiveChurchId }
-              : undefined,
+              ? { church_id: effectiveChurchId, deleted_at: null }
+              : { deleted_at: null },
             include: { church: { select: { id: true, church_name: true } } },
             take: 1,
           },

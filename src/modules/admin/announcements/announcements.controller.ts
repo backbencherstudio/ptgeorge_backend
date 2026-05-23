@@ -10,7 +10,6 @@ import {
   Req,
   HttpCode,
   HttpStatus,
-  ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -38,7 +37,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @ApiTags('Announcements')
-@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
+@ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.SUPER_ADMIN, Role.CHURCH_ADMIN)
 @Controller('announcements')
@@ -162,7 +161,7 @@ How it works:
     },
   })
   async create(@Body() createDto: CreateAnnouncementDto, @Req() req: any) {
-    const userId = req.user?.userId || req.user?.id || req.user?.sub;
+    const userId = req.user?.userId;
     const userType = req.user?.type;
 
     // Get church ID from database if user is CHURCH_ADMIN
@@ -293,9 +292,9 @@ Retrieve announcements with powerful filtering options:
     description: 'Announcements retrieved successfully',
   })
   findAll(@Query() query: AnnouncementQueryDto, @Req() req: any) {
-    const userId = req.user?.userId || req.user?.id || req.user?.sub;
+    const userId = req.user?.userId;
     const isAdmin =
-      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'ADMIN';
+      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'CHURCH_ADMIN';
     const userChurchId = req.user?.church_id;
     return this.announcementsService.findAll(
       query,
@@ -314,17 +313,17 @@ Retrieve announcements with powerful filtering options:
     name: 'id',
     description: 'Unique identifier of the announcement (UUID format)',
     example: 'd637e85c-d8eb-4fd8-b75d-dba41078de30',
-    format: 'uuid',
+    format: 'string',
   })
   @ApiResponse({
     status: 200,
     description: 'Announcement retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'Announcement not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
-    const userId = req.user?.userId || req.user?.id || req.user?.sub;
+  findOne(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.userId;
     const isAdmin =
-      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'ADMIN';
+      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'CHURCH_ADMIN';
     const userChurchId = req.user?.church_id;
     return this.announcementsService.findOne(id, userId, isAdmin, userChurchId);
   }
@@ -347,7 +346,7 @@ Only the creator or an admin can update an announcement.
     name: 'id',
     description: 'ID of the announcement to update',
     example: 'd637e85c-d8eb-4fd8-b75d-dba41078de30',
-    format: 'uuid',
+    format: 'string',
   })
   @ApiBody({
     type: UpdateAnnouncementDto,
@@ -387,13 +386,13 @@ Only the creator or an admin can update an announcement.
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Announcement not found' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() updateDto: UpdateAnnouncementDto,
     @Req() req: any,
   ) {
-    const userId = req.user?.userId || req.user?.id || req.user?.sub;
+    const userId = req.user?.userId;
     const isAdmin =
-      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'ADMIN';
+      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'CHURCH_ADMIN';
     return this.announcementsService.update(id, updateDto, userId, isAdmin);
   }
 
@@ -409,16 +408,16 @@ The announcement will only show during its active date range.
   @ApiParam({
     name: 'id',
     description: 'ID of the announcement to publish',
-    format: 'uuid',
+    format: 'string',
   })
   @ApiResponse({
     status: 200,
     description: 'Announcement published successfully',
   })
-  publish(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
-    const userId = req.user?.userId || req.user?.id || req.user?.sub;
+  publish(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.userId;
     const isAdmin =
-      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'ADMIN';
+      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'CHURCH_ADMIN';
     return this.announcementsService.publish(id, userId, isAdmin);
   }
 
@@ -433,16 +432,16 @@ The announcement will be hidden from all users immediately.
   @ApiParam({
     name: 'id',
     description: 'ID of the announcement to unpublish',
-    format: 'uuid',
+    format: 'string',
   })
   @ApiResponse({
     status: 200,
     description: 'Announcement unpublished successfully',
   })
-  unpublish(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
-    const userId = req.user?.userId || req.user?.id || req.user?.sub;
+  unpublish(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.userId;
     const isAdmin =
-      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'ADMIN';
+      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'CHURCH_ADMIN';
     return this.announcementsService.unpublish(id, userId, isAdmin);
   }
 
@@ -459,16 +458,16 @@ Only the creator or an admin can delete an announcement.
   @ApiParam({
     name: 'id',
     description: 'ID of the announcement to delete',
-    format: 'uuid',
+    format: 'string',
   })
   @ApiResponse({
     status: 200,
     description: 'Announcement deleted successfully',
   })
-  remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
-    const userId = req.user?.userId || req.user?.id || req.user?.sub;
+  remove(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.userId;
     const isAdmin =
-      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'ADMIN';
+      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'CHURCH_ADMIN';
     return this.announcementsService.remove(id, userId, isAdmin);
   }
 }

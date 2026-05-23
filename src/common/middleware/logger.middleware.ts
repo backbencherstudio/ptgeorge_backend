@@ -1,6 +1,7 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
+import * as os from 'os';
 
 // ─── ANSI colour helpers ──────────────────────────────────────────────────────
 const c = {
@@ -60,21 +61,41 @@ function writeLog(level: 'info' | 'warn' | 'error', line: string): void {
   else process.stdout.write(line + '\n');
 }
 
-function inlinePayload(value: unknown, indent = 2): string {
-  if (value === undefined || value === null) return '';
+const SEP = paint(c.gray, '─'.repeat(90));
 
-  const json = JSON.stringify(value, null, indent);
-  if (!json || json === '{}' || json === '[]' || json === 'null') return '';
+// ─── Device parser ────────────────────────────────────────────────────────────
+function parseDevice(userAgent: string | null): string {
+  if (!userAgent) return 'Unknown';
 
-  return json
-    .split('\n')
-    .map((l) => paint(c.gray, '  ' + l))
-    .join('\n');
+  if (/mobile/i.test(userAgent)) return 'Mobile';
+  if (/tablet/i.test(userAgent)) return 'Tablet';
+  return 'Desktop';
 }
 
-const SEP = paint(c.gray, '─'.repeat(72));
+function parseBrowser(userAgent: string | null): string {
+  if (!userAgent) return 'Unknown';
 
-// ─── Field type ───────────────────────────────────────────────────────────────
+  if (userAgent.includes('Firefox')) return 'Firefox';
+  if (userAgent.includes('Edg')) return 'Edge';
+  if (userAgent.includes('Chrome')) return 'Chrome';
+  if (userAgent.includes('Safari')) return 'Safari';
+
+  return 'Unknown';
+}
+
+function parseOS(userAgent: string | null): string {
+  if (!userAgent) return 'Unknown';
+
+  if (userAgent.includes('Windows')) return 'Windows';
+  if (userAgent.includes('Mac')) return 'MacOS';
+  if (userAgent.includes('Linux')) return 'Linux';
+  if (userAgent.includes('Android')) return 'Android';
+  if (userAgent.includes('iPhone')) return 'iPhone';
+
+  return 'Unknown';
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface LogFields {
   level: 'info' | 'warn' | 'error';
   timestamp: string;
@@ -83,15 +104,36 @@ interface LogFields {
   path: string;
   statusCode: number;
   durationMs: number;
+
   ip: string | null;
+  forwardedFor: string | null;
+  host: string | null;
+  origin: string | null;
+  referer: string | null;
+
   userAgent: string | null;
+  browser: string;
+  os: string;
+  device: string;
+
   userId: string | null;
-  userType: string | null;
+  userEmail: string | null;
+  userRole: string | null;
+
+  protocol: string;
+  httpVersion: string;
+
   query: unknown;
   params: unknown;
   body: unknown;
   response: unknown;
+
   responseSize: string | null;
+
+  cpuUsage: NodeJS.CpuUsage;
+  memoryUsage: NodeJS.MemoryUsage;
+
+  serverHostname: string;
 }
 
 @Injectable()
@@ -115,28 +157,26 @@ export class LoggerMiddleware implements NestMiddleware {
 
   // ─── Skip config ────────────────────────────────────────────────────────────
   private readonly skipPrefixes = ['/api/docs', '/public', '/storage'];
+
   private readonly skipExact = new Set(['/health', '/favicon.ico']);
-  private readonly skipContains = [
-    '/.well-known/', // Skip all well-known requests
-    'com.chrome.devtools.json', // Skip Chrome DevTools requests
-  ];
+
+  private readonly skipContains = ['/.well-known/', 'com.chrome.devtools.json'];
 
   private shouldSkip(path: string): boolean {
-    // Skip exact matches
     if (this.skipExact.has(path)) return true;
 
-    // Skip paths that contain specific strings
     if (this.skipContains.some((pattern) => path.includes(pattern))) {
       return true;
     }
 
-    // Skip paths with specific prefixes
     return this.skipPrefixes.some((prefix) => path.startsWith(prefix));
   }
 
   // ─── Mask sensitive data ────────────────────────────────────────────────────
   private mask(value: unknown, depth = 0): unknown {
-    if (depth > 4 || value === null || value === undefined) return value;
+    if (depth > 4 || value === null || value === undefined) {
+      return value;
+    }
 
     if (Array.isArray(value)) {
       return value.map((item) => this.mask(item, depth + 1));
@@ -144,59 +184,54 @@ export class LoggerMiddleware implements NestMiddleware {
 
     if (typeof value === 'object' && !Buffer.isBuffer(value)) {
       const out: Record<string, unknown> = {};
+
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
         out[k] = this.sensitiveKeys.has(k.toLowerCase())
-          ? '•••'
+          ? '••••••'
           : this.mask(v, depth + 1);
       }
+
       return out;
     }
 
-    if (typeof value === 'string' && value.length > 800) {
-      return `${value.slice(0, 800)}…[+${value.length - 800} chars]`;
+    if (typeof value === 'string' && value.length > 1000) {
+      return `${value.slice(0, 1000)}...[+${value.length - 1000} chars]`;
     }
 
     return value;
   }
 
-  // ─── Safely normalize response body ───────────────────────────────────────
+  // ─── Normalize response body ────────────────────────────────────────────────
   private normalizeResponseBody(body: unknown): unknown {
     if (body === undefined || body === null) return null;
 
-    // Handle Buffer responses
     if (Buffer.isBuffer(body)) {
       return `[Buffer ${body.length} bytes]`;
     }
 
-    // Handle string responses (HTML, JSON, text)
     if (typeof body === 'string') {
-      // Try to parse as JSON for better logging
       try {
-        const parsed = JSON.parse(body);
-        return parsed;
+        return JSON.parse(body);
       } catch {
-        // Plain-text or HTML response — truncate if huge
-        if (body.length > 800) {
-          return `${body.slice(0, 800)}…[+${body.length - 800} chars]`;
-        }
-        return body.length > 0 ? body : null;
+        return body.length > 1000
+          ? `${body.slice(0, 1000)}...[truncated]`
+          : body;
       }
     }
 
-    // Return as-is for objects, numbers, booleans
     return body;
   }
 
-  // ─── Production: single structured JSON line ─────────────────────────────
+  // ─── Structured JSON log ───────────────────────────────────────────────────
   private structuredPayload(fields: LogFields): string {
     return JSON.stringify(fields);
   }
 
-  // ─── Development: pretty coloured block ──────────────────────────────────
+  // ─── Pretty dev block ──────────────────────────────────────────────────────
   private prettyBlock(fields: LogFields): string {
     const methodBadge =
       METHOD_STYLES[fields.method] ??
-      paint(c.bold, c.white, ` ${fields.method.padEnd(7)}`);
+      paint(c.bold, c.white, ` ${fields.method.padEnd(7)} `);
 
     const header = [
       levelTag(fields.statusCode),
@@ -212,32 +247,66 @@ export class LoggerMiddleware implements NestMiddleware {
 
     const lines: string[] = [SEP, header];
 
-    // meta row
     const meta: string[] = [];
+
     if (fields.userId) {
       meta.push(
         paint(c.magenta, `👤 ${fields.userId}`) +
-          paint(c.gray, ` (${fields.userType ?? 'unknown'})`),
+          paint(
+            c.gray,
+            ` (${fields.userEmail ?? fields.userRole ?? 'unknown'})`,
+          ),
       );
     }
-    if (fields.ip) meta.push(paint(c.gray, `🌐 ${fields.ip}`));
-    if (fields.responseSize)
-      meta.push(paint(c.dim, c.gray, `📦 ${fields.responseSize}`));
-    if (fields.userAgent) {
-      const ua =
-        fields.userAgent.length > 60
-          ? fields.userAgent.slice(0, 60) + '…'
-          : fields.userAgent;
-      meta.push(paint(c.dim, c.gray, `🔧 ${ua}`));
+
+    if (fields.ip) {
+      meta.push(paint(c.gray, `🌐 ${fields.ip}`));
     }
+
+    meta.push(
+      paint(c.blue, `💻 ${fields.device}`),
+      paint(c.cyan, `🧭 ${fields.browser}`),
+      paint(c.yellow, `🖥️ ${fields.os}`),
+    );
+
+    if (fields.responseSize) {
+      meta.push(paint(c.green, `📦 ${fields.responseSize}`));
+    }
+
+    if (fields.host) {
+      meta.push(paint(c.magenta, `🏠 ${fields.host}`));
+    }
+
     if (meta.length) {
       lines.push('  ' + meta.join(paint(c.dim, c.gray, '  ·  ')));
     }
 
+    if (fields.userAgent) {
+      lines.push(
+        paint(c.dim, c.gray, `  🔧 ${fields.userAgent.slice(0, 150)}`),
+      );
+    }
+
+    if (fields.referer) {
+      lines.push(paint(c.dim, c.cyan, `  ↩ Referer: ${fields.referer}`));
+    }
+
+    lines.push(
+      paint(
+        c.dim,
+        c.yellow,
+        `  ⚡ Memory RSS: ${Math.round(
+          fields.memoryUsage.rss / 1024 / 1024,
+        )} MB`,
+      ),
+    );
+
+    lines.push(paint(c.dim, c.green, `  🖥 Host: ${fields.serverHostname}`));
+
     return lines.join('\n');
   }
 
-  // ─── Main middleware ──────────────────────────────────────────────────────
+  // ─── Main middleware ───────────────────────────────────────────────────────
   use(req: Request & { user?: any }, res: Response, next: NextFunction): void {
     const url = req.originalUrl || req.url;
 
@@ -246,25 +315,26 @@ export class LoggerMiddleware implements NestMiddleware {
     }
 
     const startedAt = Date.now();
+
     let capturedBody: unknown;
 
-    // Store original methods
     const originalJson = res.json.bind(res);
     const originalSend = res.send.bind(res);
 
-    // Override json method
-    res.json = function (body: unknown): Response {
+    // ─── Capture response json ─────────────────────────────────────────────
+    res.json = ((body: unknown): Response => {
       capturedBody = body;
       return originalJson(body);
-    };
+    }) as typeof res.json;
 
-    // Override send method
-    res.send = function (body: unknown): Response {
+    // ─── Capture response send ─────────────────────────────────────────────
+    res.send = ((body: unknown): Response => {
       if (capturedBody === undefined) {
         capturedBody = body;
       }
+
       return originalSend(body);
-    };
+    }) as typeof res.send;
 
     // ─── Request ID ────────────────────────────────────────────────────────
     const requestId =
@@ -273,49 +343,80 @@ export class LoggerMiddleware implements NestMiddleware {
       randomUUID();
 
     req.headers['x-request-id'] = requestId;
+
     res.setHeader('x-request-id', requestId);
 
-    // ─── Emit log on finish ────────────────────────────────────────────────
+    // ─── Finish listener ───────────────────────────────────────────────────
     res.on('finish', () => {
       const durationMs = Date.now() - startedAt;
+
       const statusCode = res.statusCode;
+
       const level: 'info' | 'warn' | 'error' =
         statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
 
-      const userId = req.user?.userId ?? req.user?.id ?? null;
-      const userType = req.user?.email ?? null;
+      // ─── Better IP detection 🔥 ─────────────────────────────────────────
+      const forwardedFor = req.headers['x-forwarded-for'];
 
-      // Get IP address (Express 5 compatible)
       const ip =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-        req.socket?.remoteAddress ||
-        null;
+        typeof forwardedFor === 'string'
+          ? forwardedFor.split(',')[0].trim()
+          : req.socket?.remoteAddress || req.ip || null;
 
-      // Safely get content-length header
       const rawSize = res.getHeader('content-length');
+
       let responseSize: string | null = null;
+
       if (rawSize !== undefined && rawSize !== null) {
-        const sizeStr = String(rawSize);
-        responseSize = sizeStr === '0' ? null : `${sizeStr} B`;
+        responseSize = `${String(rawSize)} B`;
       }
+
+      const userAgent = req.get('user-agent') ?? null;
 
       const fields: LogFields = {
         level,
         timestamp: new Date().toISOString(),
+
         requestId,
+
         method: req.method,
         path: req.originalUrl || req.url,
+
         statusCode,
         durationMs,
+
         ip,
-        userAgent: req.get('user-agent') ?? null,
-        userId,
-        userType,
+        forwardedFor: typeof forwardedFor === 'string' ? forwardedFor : null,
+
+        host: req.get('host') ?? null,
+        origin: req.get('origin') ?? null,
+        referer: req.get('referer') ?? null,
+
+        userAgent,
+
+        browser: parseBrowser(userAgent),
+        os: parseOS(userAgent),
+        device: parseDevice(userAgent),
+
+        userId: req.user?.userId ?? req.user?.id ?? null,
+        userEmail: req.user?.email ?? null,
+        userRole: req.user?.role ?? null,
+
+        protocol: req.protocol,
+        httpVersion: req.httpVersion,
+
         query: this.mask(req.query),
         params: this.mask(req.params),
         body: this.mask(req.body),
+
         response: this.mask(this.normalizeResponseBody(capturedBody)),
+
         responseSize,
+
+        cpuUsage: process.cpuUsage(),
+        memoryUsage: process.memoryUsage(),
+
+        serverHostname: os.hostname(),
       };
 
       writeLog(

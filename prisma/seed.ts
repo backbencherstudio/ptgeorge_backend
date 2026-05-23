@@ -1,4 +1,3 @@
-// prisma/seed.ts
 import {
   PrismaClient,
   UserStatus,
@@ -11,8 +10,6 @@ import { randomUUID } from 'crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import appConfig from '../src/config/app.config';
 import { Role } from '../src/common/guard/role/role.enum';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const connectionString = appConfig().database.url;
 const adapter = new PrismaPg({ connectionString });
@@ -1180,7 +1177,187 @@ async function main() {
     }
     console.log(`  ✅ Created ${metricsCreated} daily metrics records`);
 
-    // Step 12: Display Summary
+    // Step 12: Create sample ad metrics for analytics
+    console.log('\n📝 Step 12: Creating announcements...');
+
+    // Get churches for targeting
+    const graceChurch = await prisma.church.findFirst({
+      where: { church_email: 'admin@gracechurch.org' },
+    });
+    const faithChurch = await prisma.church.findFirst({
+      where: { church_email: 'admin@faithassembly.org' },
+    });
+
+    // Get super admin user
+    const superAdminUser = await prisma.user.findFirst({
+      where: { email: appConfig().defaultUser.system.email },
+    });
+
+    // Get church admin users
+    const graceChurchAdmin = await prisma.user.findFirst({
+      where: { email: 'admin@gracechurch.org' },
+    });
+    const faithChurchAdmin = await prisma.user.findFirst({
+      where: { email: 'admin@faithassembly.org' },
+    });
+
+    const announcementsData = [
+      {
+        title: 'Platform Maintenance — Feb 15',
+        message:
+          'Scheduled maintenance on Feb 15 from 2–4 AM EST. The platform will be temporarily unavailable during this time.',
+        status: 'PUBLISHED',
+        audience: 'ALL_USERS',
+        target_church_ids: [],
+        start_date: new Date('2025-02-08T00:00:00Z'),
+        end_date: new Date('2025-02-15T23:59:59Z'),
+        created_by_id: superAdminUser?.id,
+      },
+      {
+        title: 'New Feature: Helper Assignment in Portfolio',
+        message:
+          'Pros can now manage helper assignments from their portfolio page. Check out the new feature today!',
+        status: 'PUBLISHED',
+        audience: 'ALL_USERS',
+        target_church_ids: [],
+        start_date: new Date('2025-02-06T00:00:00Z'),
+        end_date: new Date('2025-03-06T23:59:59Z'),
+        created_by_id: superAdminUser?.id,
+      },
+      {
+        title: 'Verify Your Church Email Domain',
+        message:
+          'All churches must re-verify their email domain by March 1. Please update your domain settings in the church dashboard.',
+        status: 'PUBLISHED',
+        audience: 'CHURCH_ADMINS_ONLY',
+        target_church_ids: [],
+        start_date: new Date('2025-02-03T00:00:00Z'),
+        end_date: new Date('2025-03-01T23:59:59Z'),
+        created_by_id: superAdminUser?.id,
+      },
+      {
+        title: 'Grace Church Christmas Service',
+        message:
+          'Join us for Christmas Eve service at 7 PM. Special music and candlelight ceremony.',
+        status: 'PUBLISHED',
+        audience: 'ALL_USERS',
+        target_church_ids: graceChurch ? [graceChurch.id] : [],
+        start_date: new Date('2025-12-20T00:00:00Z'),
+        end_date: new Date('2025-12-25T23:59:59Z'),
+        created_by_id: graceChurchAdmin?.id,
+      },
+      {
+        title: 'Easter Sunday Celebration',
+        message:
+          'Celebrate Easter Sunday with us at 10 AM. Sunrise service at 6 AM followed by breakfast.',
+        status: 'PUBLISHED',
+        audience: 'ALL_USERS',
+        target_church_ids: graceChurch ? [graceChurch.id] : [],
+        start_date: new Date('2025-04-01T00:00:00Z'),
+        end_date: new Date('2025-04-09T23:59:59Z'),
+        created_by_id: graceChurchAdmin?.id,
+      },
+      {
+        title: 'Faith Assembly Church Revival',
+        message:
+          'Join our 3-day revival event with special guest speakers. All are welcome!',
+        status: 'PUBLISHED',
+        audience: 'ALL_USERS',
+        target_church_ids: faithChurch ? [faithChurch.id] : [],
+        start_date: new Date('2025-03-10T00:00:00Z'),
+        end_date: new Date('2025-03-13T23:59:59Z'),
+        created_by_id: faithChurchAdmin?.id,
+      },
+      {
+        title: 'New Admin Training Session',
+        message:
+          'Training for church admins on new platform features. Register by Feb 20.',
+        status: 'PUBLISHED',
+        audience: 'CHURCH_ADMINS_ONLY',
+        target_church_ids: [],
+        start_date: new Date('2025-02-15T00:00:00Z'),
+        end_date: new Date('2025-02-28T23:59:59Z'),
+        created_by_id: superAdminUser?.id,
+      },
+      {
+        title: 'Year-End Giving Campaign',
+        message:
+          'Help us reach our year-end giving goal. Every donation makes a difference!',
+        status: 'PUBLISHED',
+        audience: 'ALL_USERS',
+        target_church_ids: [],
+        start_date: new Date('2025-12-01T00:00:00Z'),
+        end_date: new Date('2025-12-31T23:59:59Z'),
+        created_by_id: superAdminUser?.id,
+      },
+      {
+        title: 'System Security Update',
+        message:
+          'Important security update will be applied on March 5 at 3 AM EST. Expect 1 hour downtime.',
+        status: 'PUBLISHED',
+        audience: 'SUPER_ADMINS_ONLY',
+        target_church_ids: [],
+        start_date: new Date('2025-03-01T00:00:00Z'),
+        end_date: new Date('2025-03-05T23:59:59Z'),
+        created_by_id: superAdminUser?.id,
+      },
+      {
+        title: 'Draft: New Member Onboarding Guide',
+        message:
+          'Draft announcement - New member onboarding guide coming soon. Still in review.',
+        status: 'UNPUBLISHED',
+        audience: 'ALL_USERS',
+        target_church_ids: [],
+        start_date: new Date('2025-02-20T00:00:00Z'),
+        end_date: new Date('2025-03-20T23:59:59Z'),
+        created_by_id: superAdminUser?.id,
+      },
+    ];
+
+    let announcementsCreated = 0;
+    for (const announcementData of announcementsData) {
+      if (!announcementData.created_by_id) {
+        console.log(
+          `  ⚠️ Skipping announcement "${announcementData.title}" - creator not found`,
+        );
+        continue;
+      }
+
+      const existingAnnouncement = await prisma.announcement.findFirst({
+        where: {
+          title: announcementData.title,
+          created_by_id: announcementData.created_by_id,
+          deleted_at: null,
+        },
+      });
+
+      if (!existingAnnouncement) {
+        await prisma.announcement.create({
+          data: {
+            id: randomUUID(),
+            title: announcementData.title,
+            message: announcementData.message,
+            status: announcementData.status as any,
+            audience: announcementData.audience as any,
+            target_church_ids: announcementData.target_church_ids,
+            start_date: announcementData.start_date,
+            end_date: announcementData.end_date,
+            created_by_id: announcementData.created_by_id,
+          },
+        });
+        announcementsCreated++;
+        console.log(`  ✅ Announcement created: ${announcementData.title}`);
+      } else {
+        console.log(
+          `  ✅ Announcement already exists: ${announcementData.title}`,
+        );
+      }
+    }
+    console.log(
+      `  📊 Total announcements created/found: ${announcementsCreated}/${announcementsData.length}`,
+    );
+
+    // Step 13: Display Summary
     console.log('\n' + '='.repeat(60));
     console.log('📊 SEEDING SUMMARY');
     console.log('='.repeat(60));

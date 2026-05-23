@@ -7,7 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-
 enum UserType {
   SUPER_ADMIN
   ADMIN
@@ -22,8 +21,6 @@ enum UserStatus {
   SUSPENDED
   REJECTED
 }
-
-
 
 // ==========================================
 // Account 
@@ -56,11 +53,10 @@ model Account {
 //  USER MODEL
 // ==========================================
 
-
 model User {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String      @id @default(cuid())
+  created_at DateTime    @default(now())
+  updated_at DateTime    @default(now())
   deleted_at DateTime?
   status     UserStatus? @default(PENDING)
 
@@ -94,9 +90,9 @@ model User {
   description        String? @db.Text
 
   // fcm token for push notifications 
-  fcm_token     String?
-  google_id     String? @unique 
-  apple_id      String? @unique
+  fcm_token String?
+  google_id String? @unique
+  apple_id  String? @unique
 
   // other info
   avatar   String?
@@ -139,22 +135,24 @@ model User {
   receivedNotifications Notification[] @relation("notificationReceiver")
   sentNotifications     Notification[] @relation("notificationSender")
 
-
   // --- Other Relation --- 
   ucodes                   Ucode[]
   roles_assigned_to_me     RoleUser[]                @relation("UserRoles")
   roles_i_assigned         RoleUser[]                @relation("RoleAssignment")
   userNotificationSettings UserNotificationSetting[]
-  
+
   // community
-  churchUser         Church[] @relation("ChurchToUser")
+  churchUser         Church[]          @relation("ChurchToUser")
   church_memberships ChurchMember[]    @relation("UserToMemberships")
   church_communities ChurchCommunity[] @relation("UserToCommunities")
 
   // ads manager
-  created_ads   Ad[]       @relation("UserCreatedAds")
-  ad_views      AdView[]   @relation("UserAdViews")
-  ad_clicks     AdClick[]  @relation("UserAdClicks")
+  created_ads Ad[]      @relation("UserCreatedAds")
+  ad_views    AdView[]  @relation("UserAdViews")
+  ad_clicks   AdClick[] @relation("UserAdClicks")
+
+  // ann
+  created_announcements Announcement[] @relation("UserCreatedAnnouncements")
 
   @@map("users")
 }
@@ -182,7 +180,6 @@ model Ucode {
  * ---------------------------------------------------------------------
  */
 
-
 enum ChurchAuthType {
   SYSTEM_ADMIN
   EDITOR
@@ -209,7 +206,6 @@ enum ReactType {
   LOVE
 }
 
-
 model Church {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
@@ -222,7 +218,7 @@ model Church {
   church_domain    String @unique
   church_adminname String @db.VarChar(255)
 
-  google_id String? @unique 
+  google_id String? @unique
   apple_id  String? @unique
 
   church_members Int? @default(0)
@@ -236,11 +232,8 @@ model Church {
   roleUsers          RoleUser[]
   members            ChurchMember[]    @relation("ChurchToMembers")
   church_communities ChurchCommunity[] @relation("ChurchToCommunities")
-
   @@map("churches")
 }
-
-
 
 model ChurchMember {
   id         String    @id @default(cuid())
@@ -249,32 +242,30 @@ model ChurchMember {
   deleted_at DateTime?
 
   church_id String
-  church    Church   @relation("ChurchToMembers", fields: [church_id], references: [id], onDelete: Cascade)
-  
-  user_id   String
-  user      User     @relation("UserToMemberships", fields: [user_id], references: [id], onDelete: Cascade)
-  
-  church_role String?  @db.VarChar(100) 
+  church    Church @relation("ChurchToMembers", fields: [church_id], references: [id], onDelete: Cascade)
+
+  user_id String
+  user    User   @relation("UserToMemberships", fields: [user_id], references: [id], onDelete: Cascade)
+
+  church_role String?            @db.VarChar(100)
   status      ChurchMemberStatus @default(ACTIVE)
-  joined_at   DateTime @default(now())
-  
+  joined_at   DateTime           @default(now())
+
   approved_by String?
   approved_at DateTime?
-  notes       String?  @db.Text
+  notes       String?   @db.Text
 
   communities ChurchCommunity[]    @relation("MemberToCommunities")
   posts       CommunityPost[]      @relation("MemberToPosts")
   comments    CommunityComment[]   @relation("MemberToComments")
   reacts      CommunityPostReact[] @relation("MemberToReacts")
-  
+
   @@unique([church_id, user_id])
   @@index([church_id])
   @@index([user_id])
   @@index([status])
   @@map("church_members")
 }
-
-
 
 model ChurchCommunity {
   id         String    @id @default(cuid())
@@ -290,7 +281,7 @@ model ChurchCommunity {
 
   church_id String
   church    Church @relation("ChurchToCommunities", fields: [church_id], references: [id], onDelete: Cascade)
- 
+
   church_member_id String
   church_member    ChurchMember @relation("MemberToCommunities", fields: [church_member_id], references: [id], onDelete: Cascade)
 
@@ -299,13 +290,11 @@ model ChurchCommunity {
   @@map("church_community")
 }
 
-
-
 model CommunityPost {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
-  
+
   title String
   image String[]
 
@@ -314,13 +303,12 @@ model CommunityPost {
 
   church_member_id String
   church_member    ChurchMember @relation("MemberToPosts", fields: [church_member_id], references: [id], onDelete: Cascade)
-   
+
   comments CommunityComment[]   @relation("PostToComments")
   reacts   CommunityPostReact[] @relation("PostToReacts")
 
   @@map("community_post")
 }
-
 
 model CommunityComment {
   id         String   @id @default(cuid())
@@ -335,11 +323,9 @@ model CommunityComment {
 
   church_member_id String
   church_member    ChurchMember @relation("MemberToComments", fields: [church_member_id], references: [id], onDelete: Cascade)
-  
+
   @@map("community_comment")
 }
-
-
 
 model CommunityPostReact {
   id         String   @id @default(cuid())
@@ -353,11 +339,9 @@ model CommunityPostReact {
 
   church_member_id String
   church_member    ChurchMember @relation("MemberToReacts", fields: [church_member_id], references: [id], onDelete: Cascade)
-  
+
   @@map("community_post_react")
 }
-
-
 
 /**
  * ---------------------------------------------------------------------
@@ -491,7 +475,7 @@ model UserNotificationSetting {
  * ---------------------------------------------------------------------
  */
 
- // ==========================================
+// ==========================================
 // ADS MANAGER SCHEMA
 // ==========================================
 
@@ -521,25 +505,25 @@ model Ad {
   description String @db.Text
   link        String @db.VarChar(500)
   thumbnail   String @db.VarChar(500)
-  
-  status      AdStatus   @default(ACTIVE)
-  placement   AdPlacement @default(HOME_BANNER)
-  
-  country     String?  // e.g., "USA", "Canada"
-  city        String?  // e.g., "New York", "Los Angeles" (optional)
-  
+
+  status    AdStatus    @default(ACTIVE)
+  placement AdPlacement @default(HOME_BANNER)
+
+  country String? // e.g., "USA", "Canada"
+  city    String? // e.g., "New York", "Los Angeles" (optional)
+
   // Date range
   start_date DateTime
   end_date   DateTime
-  
+
   // Analytics
-  total_views    Int @default(0)
-  total_clicks   Int @default(0)
-  
+  total_views  Int @default(0)
+  total_clicks Int @default(0)
+
   // User tracking (who created the ad)
   created_by_id String
-  created_by    User @relation("UserCreatedAds", fields: [created_by_id], references: [id])
-  
+  created_by    User   @relation("UserCreatedAds", fields: [created_by_id], references: [id])
+
   // Analytics tracking
   ad_views   AdView[]
   ad_clicks  AdClick[]
@@ -554,16 +538,16 @@ model Ad {
 model AdView {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
-  
-  ad_id      String
-  ad         Ad       @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-  
-  user_id    String?
-  user       User?    @relation("UserAdViews", fields: [user_id], references: [id])
-  
+
+  ad_id String
+  ad    Ad     @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+
+  user_id String?
+  user    User?   @relation("UserAdViews", fields: [user_id], references: [id])
+
   ip_address String?
   user_agent String?
-  
+
   @@index([ad_id])
   @@index([created_at])
   @@map("ad_views")
@@ -572,16 +556,16 @@ model AdView {
 model AdClick {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
-  
-  ad_id      String
-  ad         Ad       @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-  
-  user_id    String?
-  user       User?    @relation("UserAdClicks", fields: [user_id], references: [id])
-  
+
+  ad_id String
+  ad    Ad     @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+
+  user_id String?
+  user    User?   @relation("UserAdClicks", fields: [user_id], references: [id])
+
   ip_address String?
   user_agent String?
-  
+
   @@index([ad_id])
   @@index([created_at])
   @@map("ad_clicks")
@@ -591,17 +575,65 @@ model AdMetrics {
   id         String   @id @default(cuid())
   date       DateTime @default(now())
   updated_at DateTime @default(now())
-  
-  ad_id      String
-  ad         Ad       @relation(fields: [ad_id], references: [id], onDelete: Cascade)
-  
-  views      Int @default(0)
-  clicks     Int @default(0)
-  
+
+  ad_id String
+  ad    Ad     @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+
+  views  Int @default(0)
+  clicks Int @default(0)
+
   @@unique([ad_id, date])
   @@index([ad_id])
   @@index([date])
   @@map("ad_metrics")
+}
+
+// ==========================================
+// ANNOUNCEMENT SCHEMA
+// ==========================================
+
+enum AnnouncementAudience {
+  ALL_USERS
+  CHURCH_ADMINS_ONLY
+  SUPER_ADMINS_ONLY
+  SPECIFIC_CHURCHES
+}
+
+enum AnnouncementStatus {
+  PUBLISHED
+  UNPUBLISHED
+}
+
+model Announcement {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deleted_at DateTime?
+
+  title   String @db.VarChar(255)
+  message String @db.Text
+
+  status   AnnouncementStatus   @default(UNPUBLISHED)
+  audience AnnouncementAudience @default(ALL_USERS)
+
+  // Date range
+  start_date DateTime
+  end_date   DateTime
+
+  // Target churches - empty array = all churches, has IDs = specific churches only
+  target_church_ids String[]
+
+  // User tracking (who created the announcement)
+  created_by_id String
+  created_by    User @relation("UserCreatedAnnouncements", fields: [created_by_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([audience])
+  @@index([start_date, end_date])
+  @@index([created_at])
+  @@index([created_by_id])
+  @@map("announcements")
 }
 
 /**
@@ -712,9 +744,4 @@ enum PermissionAction {
   update
   delete
   assign
-}
-
-enum AnnouncementStatus {
-  PUBLISHED
-  UNPUBLISHED
 }

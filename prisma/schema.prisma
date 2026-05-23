@@ -150,6 +150,12 @@ model User {
   churchUser         Church[] @relation("ChurchToUser")
   church_memberships ChurchMember[]    @relation("UserToMemberships")
   church_communities ChurchCommunity[] @relation("UserToCommunities")
+
+  // ads manager
+  created_ads   Ad[]       @relation("UserCreatedAds")
+  ad_views      AdView[]   @relation("UserAdViews")
+  ad_clicks     AdClick[]  @relation("UserAdClicks")
+
   @@map("users")
 }
 
@@ -484,6 +490,119 @@ model UserNotificationSetting {
  * Notification Schema end
  * ---------------------------------------------------------------------
  */
+
+ // ==========================================
+// ADS MANAGER SCHEMA
+// ==========================================
+
+enum AdStatus {
+  ACTIVE
+  PAUSED
+  HIDDEN
+}
+
+enum AdPlacement {
+  HOME_BANNER
+  SIDEBAR
+  IN_ARTICLE
+  POPUP
+  FULLSCREEN
+  CHURCH_FEED
+  COMMUNITY_FEED
+}
+
+model Ad {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  title       String @db.VarChar(255)
+  description String @db.Text
+  link        String @db.VarChar(500)
+  thumbnail   String @db.VarChar(500)
+  
+  status      AdStatus   @default(ACTIVE)
+  placement   AdPlacement @default(HOME_BANNER)
+  
+  country     String?  // e.g., "USA", "Canada"
+  city        String?  // e.g., "New York", "Los Angeles" (optional)
+  
+  // Date range
+  start_date DateTime
+  end_date   DateTime
+  
+  // Analytics
+  total_views    Int @default(0)
+  total_clicks   Int @default(0)
+  
+  // User tracking (who created the ad)
+  created_by_id String
+  created_by    User @relation("UserCreatedAds", fields: [created_by_id], references: [id])
+  
+  // Analytics tracking
+  ad_views   AdView[]
+  ad_clicks  AdClick[]
+  ad_metrics AdMetrics[]
+
+  @@index([status])
+  @@index([placement])
+  @@index([start_date, end_date])
+  @@map("ads")
+}
+
+model AdView {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  
+  ad_id      String
+  ad         Ad       @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+  
+  user_id    String?
+  user       User?    @relation("UserAdViews", fields: [user_id], references: [id])
+  
+  ip_address String?
+  user_agent String?
+  
+  @@index([ad_id])
+  @@index([created_at])
+  @@map("ad_views")
+}
+
+model AdClick {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  
+  ad_id      String
+  ad         Ad       @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+  
+  user_id    String?
+  user       User?    @relation("UserAdClicks", fields: [user_id], references: [id])
+  
+  ip_address String?
+  user_agent String?
+  
+  @@index([ad_id])
+  @@index([created_at])
+  @@map("ad_clicks")
+}
+
+model AdMetrics {
+  id         String   @id @default(cuid())
+  date       DateTime @default(now())
+  updated_at DateTime @default(now())
+  
+  ad_id      String
+  ad         Ad       @relation(fields: [ad_id], references: [id], onDelete: Cascade)
+  
+  views      Int @default(0)
+  clicks     Int @default(0)
+  
+  @@unique([ad_id, date])
+  @@index([ad_id])
+  @@index([date])
+  @@map("ad_metrics")
+}
 
 /**
  * ---------------------------------------------------------------------

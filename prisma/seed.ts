@@ -3,12 +3,16 @@ import {
   PrismaClient,
   UserStatus,
   ChurchMemberStatus,
+  AdStatus,
+  AdPlacement,
 } from '../prisma/generated/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import appConfig from '../src/config/app.config';
 import { Role } from '../src/common/guard/role/role.enum';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const connectionString = appConfig().database.url;
 const adapter = new PrismaPg({ connectionString });
@@ -335,6 +339,130 @@ const churchesData = [
   },
 ];
 
+// Ads data for seeding
+const adsData = [
+  {
+    title: 'Bible Study App – DigiSanctuary',
+    description:
+      'Join our interactive Bible study community. Daily devotionals, group discussions, and spiritual growth resources.',
+    link: 'https://digisanctuary.com/bible-study',
+    thumbnail: 'ads/bible-study-app.jpg',
+    status: AdStatus.ACTIVE,
+    placement: AdPlacement.HOME_BANNER,
+    country: 'USA',
+    city: 'New York',
+    start_date: new Date('2025-01-10T00:00:00Z'),
+    end_date: new Date('2025-12-31T23:59:59Z'),
+    total_views: 8900,
+    total_clicks: 1240,
+  },
+  {
+    title: 'Church Management Software',
+    description:
+      'Complete church management solution. Track members, manage events, handle donations, and more.',
+    link: 'https://churchmanager.com',
+    thumbnail: 'ads/church-management.jpg',
+    status: AdStatus.ACTIVE,
+    placement: AdPlacement.COMMUNITY_FEED,
+    country: null,
+    city: null,
+    start_date: new Date('2025-01-10T00:00:00Z'),
+    end_date: new Date('2025-12-31T23:59:59Z'),
+    total_views: 8900,
+    total_clicks: 1240,
+  },
+  {
+    title: 'Worship Music Streaming',
+    description:
+      'Stream thousands of worship songs, create playlists, and download for offline listening.',
+    link: 'https://worshipstream.com',
+    thumbnail: 'ads/worship-music.jpg',
+    status: AdStatus.PAUSED,
+    placement: AdPlacement.SIDEBAR,
+    country: 'USA',
+    city: 'Los Angeles',
+    start_date: new Date('2025-02-01T00:00:00Z'),
+    end_date: new Date('2025-12-31T23:59:59Z'),
+    total_views: 4500,
+    total_clicks: 890,
+  },
+  {
+    title: 'Online Giving Platform',
+    description:
+      'Secure online giving for churches. Accept donations, track tithes, and manage pledges.',
+    link: 'https://give.church',
+    thumbnail: 'ads/online-giving.jpg',
+    status: AdStatus.ACTIVE,
+    placement: AdPlacement.POPUP,
+    country: 'Canada',
+    city: 'Toronto',
+    start_date: new Date('2025-03-01T00:00:00Z'),
+    end_date: new Date('2025-10-31T23:59:59Z'),
+    total_views: 3200,
+    total_clicks: 560,
+  },
+  {
+    title: 'Sunday School Curriculum',
+    description:
+      'Complete curriculum for all ages. Lesson plans, activities, and teaching resources.',
+    link: 'https://sundayschool.com',
+    thumbnail: 'ads/sunday-school.jpg',
+    status: AdStatus.HIDDEN,
+    placement: AdPlacement.IN_ARTICLE,
+    country: 'UK',
+    city: 'London',
+    start_date: new Date('2025-01-15T00:00:00Z'),
+    end_date: new Date('2025-06-30T23:59:59Z'),
+    total_views: 1200,
+    total_clicks: 145,
+  },
+  {
+    title: 'Christian Podcast Network',
+    description:
+      'Discover inspiring Christian podcasts. Sermons, discussions, and testimonies.',
+    link: 'https://christianpodcasts.com',
+    thumbnail: 'ads/podcast.jpg',
+    status: AdStatus.ACTIVE,
+    placement: AdPlacement.HOME_BANNER,
+    country: 'Australia',
+    city: 'Sydney',
+    start_date: new Date('2025-04-01T00:00:00Z'),
+    end_date: new Date('2025-12-31T23:59:59Z'),
+    total_views: 5600,
+    total_clicks: 980,
+  },
+  {
+    title: 'Event Management for Churches',
+    description:
+      'Plan and manage church events, registrations, and volunteer coordination.',
+    link: 'https://churchevents.com',
+    thumbnail: 'ads/event-management.jpg',
+    status: AdStatus.PAUSED,
+    placement: AdPlacement.CHURCH_FEED,
+    country: null,
+    city: null,
+    start_date: new Date('2025-02-10T00:00:00Z'),
+    end_date: new Date('2025-09-30T23:59:59Z'),
+    total_views: 2100,
+    total_clicks: 320,
+  },
+  {
+    title: 'Bible Reading Challenge',
+    description:
+      'Join our 365-day Bible reading plan with daily reminders and progress tracking.',
+    link: 'https://biblechallenge.com',
+    thumbnail: 'ads/bible-challenge.jpg',
+    status: AdStatus.ACTIVE,
+    placement: AdPlacement.FULLSCREEN,
+    country: 'USA',
+    city: 'Chicago',
+    start_date: new Date('2025-01-01T00:00:00Z'),
+    end_date: new Date('2025-12-31T23:59:59Z'),
+    total_views: 10200,
+    total_clicks: 2150,
+  },
+];
+
 async function main() {
   console.log('🌱 Starting database seeding...');
   console.log('='.repeat(60));
@@ -559,7 +687,7 @@ async function main() {
               language: 'en',
               type: 'CHURCH_ADMIN',
               status: UserStatus.ACTIVE,
-              email_verified_at: new Date(), // ✅ Ensure email is verified
+              email_verified_at: new Date(),
             },
           });
 
@@ -605,7 +733,6 @@ async function main() {
         church = existingChurch;
         console.log(`✅ Church already exists: ${churchData.name}`);
 
-        // Fix: Check if admin user exists and has membership
         adminUser = await prisma.user.findFirst({
           where: { email: churchData.email },
           include: {
@@ -616,7 +743,6 @@ async function main() {
         });
 
         if (adminUser) {
-          // Check if email is verified
           if (!adminUser.email_verified_at) {
             await prisma.user.update({
               where: { id: adminUser.id },
@@ -625,7 +751,6 @@ async function main() {
             console.log(`  ✅ Email verified for ${adminUser.email}`);
           }
 
-          // Check if membership exists
           const hasMembership = adminUser.church_memberships.length > 0;
 
           if (!hasMembership) {
@@ -634,7 +759,6 @@ async function main() {
             );
 
             await prisma.$transaction(async (tx) => {
-              // Create missing membership
               await tx.churchMember.create({
                 data: {
                   id: randomUUID(),
@@ -648,7 +772,6 @@ async function main() {
                 },
               });
 
-              // Ensure role is assigned
               const existingRole = await tx.roleUser.findUnique({
                 where: {
                   role_id_user_id: {
@@ -669,7 +792,6 @@ async function main() {
                 });
               }
 
-              // Update church member count
               const memberCount = await tx.churchMember.count({
                 where: {
                   church_id: church.id,
@@ -841,7 +963,7 @@ async function main() {
               language: 'en',
               type: userData.type,
               status: UserStatus.ACTIVE,
-              email_verified_at: new Date(), // ✅ Ensure email is verified
+              email_verified_at: new Date(),
             },
           });
           console.log(
@@ -852,7 +974,6 @@ async function main() {
             `  ✅ User already exists: ${userData.first_name} ${userData.last_name} (${userData.role})`,
           );
 
-          // Fix: Ensure email is verified for existing users
           if (!user.email_verified_at) {
             await prisma.user.update({
               where: { id: user.id },
@@ -949,7 +1070,6 @@ async function main() {
       if (admin.church_memberships.length === 0) {
         console.log(`  ⚠️ Admin ${admin.email} has no church membership!`);
 
-        // Find their church
         const church = await prisma.church.findFirst({
           where: { church_email: admin.email },
         });
@@ -976,7 +1096,91 @@ async function main() {
       }
     }
 
-    // Step 10: Display Summary
+    // Step 10: Create Ads
+    console.log('\n📝 Step 10: Creating ads...');
+    let adsCreated = 0;
+    for (const adData of adsData) {
+      const existingAd = await prisma.ad.findFirst({
+        where: {
+          title: adData.title,
+          link: adData.link,
+          deleted_at: null,
+        },
+      });
+
+      if (!existingAd) {
+        await prisma.ad.create({
+          data: {
+            id: randomUUID(),
+            title: adData.title,
+            description: adData.description,
+            link: adData.link,
+            thumbnail: adData.thumbnail,
+            status: adData.status,
+            placement: adData.placement,
+            country: adData.country,
+            city: adData.city,
+            start_date: adData.start_date,
+            end_date: adData.end_date,
+            total_views: adData.total_views,
+            total_clicks: adData.total_clicks,
+            created_by_id: superadmin.id,
+          },
+        });
+        adsCreated++;
+        console.log(`  ✅ Ad created: ${adData.title}`);
+      } else {
+        console.log(`  ✅ Ad already exists: ${adData.title}`);
+      }
+    }
+    console.log(
+      `  📊 Total ads created/found: ${adsCreated}/${adsData.length}`,
+    );
+
+    // Step 11: Create sample ad metrics for analytics
+    console.log('\n📝 Step 11: Creating sample ad metrics...');
+    const ads = await prisma.ad.findMany();
+    let metricsCreated = 0;
+
+    for (const ad of ads) {
+      // Create daily metrics for the last 30 days
+      for (let i = 0; i < 30; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+
+        const dailyViews = Math.floor(Math.random() * 500) + 100;
+        const dailyClicks = Math.floor(
+          dailyViews * (Math.random() * 0.2 + 0.05),
+        );
+
+        const existingMetric = await prisma.adMetrics.findUnique({
+          where: {
+            ad_id_date: {
+              ad_id: ad.id,
+              date: date,
+            },
+          },
+        });
+
+        if (!existingMetric) {
+          await prisma.adMetrics.create({
+            data: {
+              id: randomUUID(),
+              ad_id: ad.id,
+              date: date,
+              views: dailyViews,
+              clicks: dailyClicks,
+              updated_at: new Date(),
+            },
+          });
+          metricsCreated++;
+        }
+      }
+    }
+    console.log(`  ✅ Created ${metricsCreated} daily metrics records`);
+
+    // Step 12: Display Summary
     console.log('\n' + '='.repeat(60));
     console.log('📊 SEEDING SUMMARY');
     console.log('='.repeat(60));
@@ -994,6 +1198,18 @@ async function main() {
 
     const totalRoleAssignments = await prisma.roleUser.count();
     console.log(`✅ Role assignments: ${totalRoleAssignments}`);
+
+    const totalAds = await prisma.ad.count();
+    console.log(`✅ Total ads: ${totalAds}`);
+
+    const totalAdViews = await prisma.adView.count();
+    console.log(`✅ Total ad views tracked: ${totalAdViews}`);
+
+    const totalAdClicks = await prisma.adClick.count();
+    console.log(`✅ Total ad clicks tracked: ${totalAdClicks}`);
+
+    const totalAdMetrics = await prisma.adMetrics.count();
+    console.log(`✅ Total ad metric records: ${totalAdMetrics}`);
 
     // Verify data integrity
     const adminsWithoutMembership = await prisma.user.count({

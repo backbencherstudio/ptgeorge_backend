@@ -145,6 +145,15 @@ model User {
   churchUser         Church[]          @relation("ChurchToUser")
   church_memberships ChurchMember[]    @relation("UserToMemberships")
   church_communities ChurchCommunity[] @relation("UserToCommunities")
+
+  // ads manager
+  created_ads Ad[]      @relation("UserCreatedAds")
+  ad_views    AdView[]  @relation("UserAdViews")
+  ad_clicks   AdClick[] @relation("UserAdClicks")
+
+  // ann
+  created_announcements Announcement[] @relation("UserCreatedAnnouncements")
+
   @@map("users")
 }
 
@@ -223,6 +232,7 @@ model Church {
   roleUsers          RoleUser[]
   members            ChurchMember[]    @relation("ChurchToMembers")
   church_communities ChurchCommunity[] @relation("ChurchToCommunities")
+
   @@map("churches")
 }
 
@@ -233,12 +243,12 @@ model ChurchMember {
   deleted_at DateTime?
 
   church_id String
-  church    Church   @relation("ChurchToMembers", fields: [church_id], references: [id], onDelete: Cascade)
-  
-  user_id   String
-  user      User     @relation("UserToMemberships", fields: [user_id], references: [id], onDelete: Cascade)
-  
-  church_role String?  @db.VarChar(100) 
+  church    Church @relation("ChurchToMembers", fields: [church_id], references: [id], onDelete: Cascade)
+
+  user_id String
+  user    User   @relation("UserToMemberships", fields: [user_id], references: [id], onDelete: Cascade)
+
+  church_role String?            @db.VarChar(100)
   status      ChurchMemberStatus @default(ACTIVE)
   joined_at   DateTime           @default(now())
 
@@ -246,10 +256,11 @@ model ChurchMember {
   approved_at DateTime?
   notes       String?   @db.Text
 
-  communities ChurchCommunity[]    @relation("MemberToCommunities")
-  posts       CommunityPost[]      @relation("MemberToPosts")
-  comments    CommunityComment[]   @relation("MemberToComments")
-  reacts      CommunityPostReact[] @relation("MemberToReacts")
+  communities             ChurchCommunity[]       @relation("MemberToCommunities")
+  posts                   CommunityPost[]         @relation("MemberToPosts")
+  comments                CommunityComment[]      @relation("MemberToComments")
+  reacts                  CommunityPostReact[]    @relation("MemberToReacts")
+  communityCommentReplies CommunityCommentReply[] @relation("MemberToCommentReplies")
 
   @@unique([church_id, user_id])
   @@index([church_id])
@@ -281,6 +292,7 @@ model ChurchCommunity {
   @@map("church_community")
 }
 
+//  post
 model CommunityPost {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
@@ -289,8 +301,8 @@ model CommunityPost {
   title String
   image String?
 
-  user_id String
-  user    User   @relation("UserToPosts",fields: [user_id], references: [id], onDelete: Cascade)
+  community_id String
+  community    ChurchCommunity @relation("CommunityToPosts", fields: [community_id], references: [id], onDelete: Cascade)
 
   church_member_id String
   church_member    ChurchMember @relation("MemberToPosts", fields: [church_member_id], references: [id], onDelete: Cascade)
@@ -301,6 +313,7 @@ model CommunityPost {
   @@map("community_post")
 }
 
+// comment
 model CommunityComment {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
@@ -315,7 +328,29 @@ model CommunityComment {
   church_member_id String
   church_member    ChurchMember @relation("MemberToComments", fields: [church_member_id], references: [id], onDelete: Cascade)
 
+  replies CommunityCommentReply[] @relation("CommentToReplies")
+
   @@map("community_comment")
+}
+
+// comment reply
+model CommunityCommentReply {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  content String   @db.Text
+  image   String?
+
+  comment_id String
+  comment    CommunityComment @relation("CommentToReplies", fields: [comment_id], references: [id], onDelete: Cascade)
+
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToCommentReplies", fields: [church_member_id], references: [id], onDelete: Cascade)
+
+  @@index([comment_id])
+  @@index([church_member_id])
+  @@map("community_comment_replies")
 }
 
 model CommunityPostReact {
@@ -323,7 +358,7 @@ model CommunityPostReact {
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
-  react_type ReactType
+  react_type ReactType @default(LOVE)
 
   post_id String
   post    CommunityPost @relation("PostToReacts", fields: [post_id], references: [id], onDelete: Cascade)
@@ -331,8 +366,13 @@ model CommunityPostReact {
   church_member_id String
   church_member    ChurchMember @relation("MemberToReacts", fields: [church_member_id], references: [id], onDelete: Cascade)
 
+  @@unique([post_id, church_member_id])
+  @@index([post_id])
+  @@index([church_member_id])
   @@map("community_post_react")
 }
+
+// ---------  comment reply and react -------------
 
 /**
  * ---------------------------------------------------------------------
@@ -617,7 +657,7 @@ model Announcement {
 
   // User tracking (who created the announcement)
   created_by_id String
-  created_by    User @relation("UserCreatedAnnouncements", fields: [created_by_id], references: [id], onDelete: Cascade)
+  created_by    User   @relation("UserCreatedAnnouncements", fields: [created_by_id], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([audience])

@@ -7,7 +7,6 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class CommunityUtils {
- 
   constructor(private readonly prisma: PrismaService) {}
 
   // ----  get active church member ----------
@@ -58,7 +57,6 @@ export class CommunityUtils {
     };
   }
 
-
   //  ------  get post with access check ------
   async getPostWithAccess(postId: string, userId: string) {
     const post = await this.prisma.communityPost.findUnique({
@@ -107,12 +105,8 @@ export class CommunityUtils {
     return memberships.map((member) => member.id);
   }
 
-  // ------  check if a specific membership id 
-  async isMyActiveMember(
-    memberId: string, 
-    userId: string
-  ): Promise<boolean> {
- 
+  // ------  check if a specific membership id
+  async isMyActiveMember(memberId: string, userId: string): Promise<boolean> {
     const member = await this.prisma.churchMember.findFirst({
       where: {
         id: memberId,
@@ -131,7 +125,6 @@ export class CommunityUtils {
     );
   }
 
- 
   // ------  build post access where condition ------
   buildPostAccessWhere(userId: string, communityId?: string) {
     const whereCondition: any = {

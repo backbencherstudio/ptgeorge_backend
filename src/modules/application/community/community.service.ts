@@ -68,6 +68,7 @@ export class CommunityService {
     };
   }
 
+  
   // get all community posts
   async findAll(
     userId: string,
@@ -112,6 +113,7 @@ export class CommunityService {
       skip,
       take: perPage,
     });
+
 
     return {
       message: 'Community posts retrieved successfully.',
@@ -199,7 +201,6 @@ export class CommunityService {
       data: commentData,
     };
   }
-
 
   // delete a comment
   async deleteComment(commentId: string, userId: string) {
@@ -325,7 +326,6 @@ export class CommunityService {
 
   // delete a comment reply
   async deleteReplyToComment(replyId: string, userId: string) {
-
     const reply = await this.prisma.communityCommentReply.findUnique({
       where: { id: replyId },
       include: {
@@ -373,7 +373,6 @@ export class CommunityService {
       data: deleted,
     };
   }
-
 
   /*-----------------------------------
            REACT  PART
@@ -427,4 +426,8 @@ export class CommunityService {
       data: newReact,
     };
   }
+
+
+
+
 }

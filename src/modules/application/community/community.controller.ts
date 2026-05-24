@@ -32,6 +32,8 @@ import {
   ApiResponse,
   ApiConsumes,
   ApiBody,
+  ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -39,7 +41,6 @@ import {
 @ApiBearerAuth()
 @Controller('community')
 export class CommunityController {
- 
   constructor(private readonly communityService: CommunityService) {}
 
   /*-----------------------------------
@@ -77,6 +78,10 @@ export class CommunityController {
 
   // get all community posts
   @ApiOperation({ summary: 'Get all community posts' })
+  @ApiParam({ name: 'communityId', description: 'Community id' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
+  @ApiQuery({ name: 'perPage', required: false, type: Number, description: 'Items per page' })
+  @ApiResponse({ status: 200, description: 'Community posts retrieved successfully.' })
   @Get('all-post/:communityId')
   async findAll(
     @Req() req: Request,
@@ -125,7 +130,7 @@ export class CommunityController {
     @UploadedFile() image?: Express.Multer.File,
   ) {
     const userId = req.user.userId;
-    return this.communityService.addComment(postId, createCommentDto, userId);
+    return this.communityService.addComment(postId, createCommentDto, userId, image);
   }
 
   // detete a comment
@@ -139,23 +144,39 @@ export class CommunityController {
     return this.communityService.deleteComment(commentId, userId);
   }
 
-
   // reply to comment
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
   @ApiOperation({ summary: 'Reply to a comment' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        comment: { type: 'string' },
+        image: { type: 'string', format: 'binary' },
+      },
+    },
+  })
   @Post('comment/:commentId/reply')
   async replyToComment(
     @Param('commentId') commentId: string,
     @Body() createCommentDto: CreateCommentDto,
     @Req() req: Request,
+    @UploadedFile() image?: Express.Multer.File,
   ) {
     const userId = req.user.userId;
     return this.communityService.replyToComment(
       commentId,
       createCommentDto,
       userId,
+      image,
     );
   }
-
 
   // delete reply to comment
   @ApiOperation({ summary: 'Delete a reply to a comment' })
@@ -188,9 +209,10 @@ export class CommunityController {
     @UploadedFile() image?: Express.Multer.File,
   ) {
     const userId = req.user.userId;
-    return this.communityService.reactToPost(postId, reactPostDto, userId);
+    return this.communityService.reactToPost(
+      postId, 
+      reactPostDto, 
+      userId
+    );
   }
-
-  
-  
 }

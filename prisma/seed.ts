@@ -4,6 +4,7 @@ import {
   ChurchMemberStatus,
   AdStatus,
   AdPlacement,
+  ReactType,
 } from '../prisma/generated/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
@@ -460,12 +461,57 @@ const adsData = [
   },
 ];
 
+// Church Posts Data
+const churchPostsData = [
+  {
+    content:
+      'Amazing worship service this Sunday! Thank you to everyone who joined us.',
+    image: 'posts/sunday-service.jpg',
+  },
+  {
+    content:
+      'Join us for our midweek Bible study every Wednesday at 7 PM. We are currently studying the book of Psalms.',
+    image: 'posts/bible-study.jpg',
+  },
+  {
+    content:
+      'Our community outreach program served over 200 families this month. Glory to God!',
+    image: 'posts/outreach.jpg',
+  },
+  {
+    content:
+      'Please keep our missionary team in your prayers as they travel to serve in South America.',
+    image: null,
+  },
+  {
+    content:
+      'Welcome to all our new members! Orientation will be held this Saturday at 10 AM.',
+    image: 'posts/new-members.jpg',
+  },
+];
+
+// Church Comments Data
+const churchCommentsData = [
+  { content: 'What a blessing! Thank you for sharing.', image: null },
+  { content: 'Amen! 🙏', image: null },
+  { content: 'I will definitely be there!', image: null },
+  { content: 'This is wonderful news!', image: null },
+  { content: 'God is good all the time!', image: 'comments/praise.jpg' },
+];
+
+// Comment Replies Data
+const commentRepliesData = [
+  { content: 'Yes, God is good!', image: null },
+  { content: 'Looking forward to it!', image: null },
+  { content: 'Thank you for organizing this.', image: null },
+];
+
 async function main() {
   console.log('🌱 Starting database seeding...');
   console.log('='.repeat(60));
 
   try {
-    // Step 1: Create Superadmin User (NO church membership - superadmin is system-wide)
+    // Step 1: Create Superadmin User
     console.log('📝 Step 1: Creating superadmin user...');
     const superadminData = {
       first_name: 'System',
@@ -475,7 +521,6 @@ async function main() {
       password: await hashPassword(appConfig().defaultUser.system.password),
       phone_number: '+1234567890',
       church_name: 'System Administration',
-      // role: Role.SUPER_ADMIN,
       language: 'en',
       type: 'SUPER_ADMIN' as const,
       status: UserStatus.ACTIVE,
@@ -636,9 +681,10 @@ async function main() {
       }
     }
 
-    // Step 6: Create Churches AND Church Admin Users (in transaction)
+    // Step 6: Create Churches AND Church Admin Users
     console.log('\n📝 Step 6: Creating churches and church admin users...');
     const createdChurches = new Map<string, any>();
+    const createdChurchMembers = new Map<string, any>();
     const churchAdminRole = createdRoles.get(Role.CHURCH_ADMIN);
 
     if (!churchAdminRole) {
@@ -654,9 +700,7 @@ async function main() {
       let adminUser;
 
       if (!existingChurch) {
-        // Create church and admin user in transaction
         const result = await prisma.$transaction(async (tx) => {
-          // Create church
           const newChurch = await tx.church.create({
             data: {
               id: randomUUID(),
@@ -670,7 +714,6 @@ async function main() {
             },
           });
 
-          // Create church admin user
           const hashedPassword = await hashPassword(churchData.adminPassword);
           const newAdminUser = await tx.user.create({
             data: {
@@ -689,8 +732,7 @@ async function main() {
             },
           });
 
-          // Create church membership for admin user
-          await tx.churchMember.create({
+          const churchMember = await tx.churchMember.create({
             data: {
               id: randomUUID(),
               church_id: newChurch.id,
@@ -703,7 +745,6 @@ async function main() {
             },
           });
 
-          // Assign CHURCH_ADMIN role
           await tx.roleUser.create({
             data: {
               role_id: churchAdminRole.id,
@@ -713,17 +754,20 @@ async function main() {
             },
           });
 
-          // Update church member count
           await tx.church.update({
             where: { id: newChurch.id },
             data: { church_members: 1 },
           });
 
-          return { church: newChurch, adminUser: newAdminUser };
+          return { church: newChurch, adminUser: newAdminUser, churchMember };
         });
 
         church = result.church;
         adminUser = result.adminUser;
+        createdChurchMembers.set(churchData.name, new Map());
+        createdChurchMembers
+          .get(churchData.name)
+          .set(adminUser.id, result.churchMember);
         console.log(
           `✅ Church created: ${churchData.name} with admin user ${churchData.email}`,
         );
@@ -756,8 +800,8 @@ async function main() {
               `  ⚠️ Missing membership for ${adminUser.email}, creating...`,
             );
 
-            await prisma.$transaction(async (tx) => {
-              await tx.churchMember.create({
+            const result = await prisma.$transaction(async (tx) => {
+              const churchMember = await tx.churchMember.create({
                 data: {
                   id: randomUUID(),
                   church_id: church.id,
@@ -802,13 +846,25 @@ async function main() {
                 where: { id: church.id },
                 data: { church_members: memberCount },
               });
+
+              return churchMember;
             });
 
+            if (!createdChurchMembers.get(churchData.name)) {
+              createdChurchMembers.set(churchData.name, new Map());
+            }
+            createdChurchMembers.get(churchData.name).set(adminUser.id, result);
             console.log(
               `  ✅ Created missing membership for ${adminUser.email}`,
             );
           } else {
             console.log(`  ✅ Admin already has church membership`);
+            if (!createdChurchMembers.get(churchData.name)) {
+              createdChurchMembers.set(churchData.name, new Map());
+            }
+            createdChurchMembers
+              .get(churchData.name)
+              .set(adminUser.id, adminUser.church_memberships[0]);
           }
         } else {
           console.log(`  ⚠️ Admin user not found for ${churchData.email}`);
@@ -817,7 +873,7 @@ async function main() {
       createdChurches.set(churchData.name, church);
     }
 
-    // Step 7: Create Additional Church Users (non-admin members)
+    // Step 7: Create Additional Church Users
     console.log('\n📝 Step 7: Creating additional church users...');
 
     const churchUsersData = {
@@ -935,6 +991,10 @@ async function main() {
 
       console.log(`\n📝 Creating users for ${churchName}:`);
 
+      if (!createdChurchMembers.get(churchName)) {
+        createdChurchMembers.set(churchName, new Map());
+      }
+
       for (const userData of users) {
         const role = createdRoles.get(userData.role);
         if (!role) {
@@ -947,6 +1007,8 @@ async function main() {
         let user = await prisma.user.findUnique({
           where: { email: userData.email },
         });
+
+        let churchMember;
 
         if (!user) {
           user = await prisma.user.create({
@@ -981,7 +1043,6 @@ async function main() {
           }
         }
 
-        // Create church membership
         const existingMembership = await prisma.churchMember.findFirst({
           where: {
             church_id: church.id,
@@ -990,7 +1051,7 @@ async function main() {
         });
 
         if (!existingMembership) {
-          await prisma.churchMember.create({
+          churchMember = await prisma.churchMember.create({
             data: {
               id: randomUUID(),
               church_id: church.id,
@@ -1004,10 +1065,12 @@ async function main() {
           });
           console.log(`  ✅ Church membership created`);
         } else {
+          churchMember = existingMembership;
           console.log(`  ✅ Church membership already exists`);
         }
 
-        // Assign role
+        createdChurchMembers.get(churchName).set(user.id, churchMember);
+
         const existingAssignment = await prisma.roleUser.findUnique({
           where: {
             role_id_user_id: {
@@ -1073,7 +1136,7 @@ async function main() {
         });
 
         if (church) {
-          await prisma.churchMember.create({
+          const churchMember = await prisma.churchMember.create({
             data: {
               id: randomUUID(),
               church_id: church.id,
@@ -1086,6 +1149,12 @@ async function main() {
             },
           });
           console.log(`  ✅ Created missing membership for ${admin.email}`);
+
+          const churchName = church.church_name;
+          if (!createdChurchMembers.get(churchName)) {
+            createdChurchMembers.set(churchName, new Map());
+          }
+          createdChurchMembers.get(churchName).set(admin.id, churchMember);
         }
       } else {
         console.log(
@@ -1094,8 +1163,146 @@ async function main() {
       }
     }
 
-    // Step 10: Create Ads
-    console.log('\n📝 Step 10: Creating ads...');
+    // Step 10: Create Church Posts, Comments, and Reacts
+    console.log('\n📝 Step 10: Creating church posts, comments, and reacts...');
+
+    for (const [churchName, church] of createdChurches) {
+      const churchMembersMap = createdChurchMembers.get(churchName);
+      if (!churchMembersMap || churchMembersMap.size === 0) {
+        console.log(
+          `  ⚠️ No members found for ${churchName}, skipping posts...`,
+        );
+        continue;
+      }
+
+      const memberIds = Array.from(churchMembersMap.keys());
+      console.log(`\n  📝 Creating content for ${churchName}:`);
+
+      // Create posts
+      for (let i = 0; i < churchPostsData.length; i++) {
+        const postData = churchPostsData[i];
+        const randomMemberId =
+          memberIds[Math.floor(Math.random() * memberIds.length)];
+        const churchMember = churchMembersMap.get(randomMemberId);
+
+        if (!churchMember) continue;
+
+        const existingPost = await prisma.churchPost.findFirst({
+          where: {
+            church_id: church.id,
+            deleted_at: null,
+          },
+        });
+
+        if (!existingPost) {
+          const post = await prisma.churchPost.create({
+            data: {
+              id: randomUUID(),
+              content: postData.content,
+              image: postData.image,
+              church_id: church.id,
+              church_member_id: churchMember.id,
+            },
+          });
+          console.log(`    ✅ Post created: ${postData.content}`);
+
+          // Add comments to each post
+          for (let j = 0; j < Math.min(3, churchCommentsData.length); j++) {
+            const commentData = churchCommentsData[j];
+            const randomCommenterId =
+              memberIds[Math.floor(Math.random() * memberIds.length)];
+            const commenter = churchMembersMap.get(randomCommenterId);
+
+            if (!commenter) continue;
+
+            const comment = await prisma.churchComment.create({
+              data: {
+                id: randomUUID(),
+                content: commentData.content,
+                image: commentData.image,
+                post_id: post.id,
+                church_member_id: commenter.id,
+              },
+            });
+            console.log(
+              `      ✅ Comment added: "${commentData.content.substring(0, 30)}..."`,
+            );
+
+            // Add replies to some comments
+            if (j < commentRepliesData.length) {
+              const replyData = commentRepliesData[j];
+              const randomReplierId =
+                memberIds[Math.floor(Math.random() * memberIds.length)];
+              const replier = churchMembersMap.get(randomReplierId);
+
+              if (replier) {
+                await prisma.churchCommentReply.create({
+                  data: {
+                    id: randomUUID(),
+                    content: replyData.content,
+                    image: replyData.image,
+                    comment_id: comment.id,
+                    church_member_id: replier.id,
+                  },
+                });
+                console.log(`        ✅ Reply added: "${replyData.content}"`);
+              }
+            }
+          }
+
+          // Add reacts to posts
+          const uniqueReactMembers = new Set();
+          const numberOfReacts = Math.min(5, memberIds.length);
+
+          for (let k = 0; k < numberOfReacts; k++) {
+            let reactMemberId;
+            do {
+              reactMemberId =
+                memberIds[Math.floor(Math.random() * memberIds.length)];
+            } while (
+              uniqueReactMembers.has(reactMemberId) &&
+              uniqueReactMembers.size < memberIds.length
+            );
+
+            uniqueReactMembers.add(reactMemberId);
+            const reactor = churchMembersMap.get(reactMemberId);
+
+            if (reactor) {
+              const reactType =
+                Math.random() > 0.5 ? ReactType.LIKE : ReactType.LOVE;
+
+              const existingReact = await prisma.churchPostReact.findUnique({
+                where: {
+                  post_id_church_member_id: {
+                    post_id: post.id,
+                    church_member_id: reactor.id,
+                  },
+                },
+              });
+
+              if (!existingReact) {
+                await prisma.churchPostReact.create({
+                  data: {
+                    id: randomUUID(),
+                    react_type: reactType,
+                    post_id: post.id,
+                    church_member_id: reactor.id,
+                  },
+                });
+                console.log(
+                  `        ✅ React added: ${reactType} from ${reactor.id.substring(0, 8)}`,
+                );
+              }
+            }
+          }
+        } else {
+          console.log(`    ✅ Post already exists: ${postData.content}`);
+        }
+      }
+    }
+
+    // Step 11: Create Ads
+    console.log('\n📝 Step 11: Creating ads...');
     let adsCreated = 0;
     for (const adData of adsData) {
       const existingAd = await prisma.ad.findFirst({
@@ -1135,13 +1342,12 @@ async function main() {
       `  📊 Total ads created/found: ${adsCreated}/${adsData.length}`,
     );
 
-    // Step 11: Create sample ad metrics for analytics
-    console.log('\n📝 Step 11: Creating sample ad metrics...');
+    // Step 12: Create sample ad metrics
+    console.log('\n📝 Step 12: Creating sample ad metrics...');
     const ads = await prisma.ad.findMany();
     let metricsCreated = 0;
 
     for (const ad of ads) {
-      // Create daily metrics for the last 30 days
       for (let i = 0; i < 30; i++) {
         const date = new Date();
         date.setDate(date.getDate() - i);
@@ -1178,10 +1384,9 @@ async function main() {
     }
     console.log(`  ✅ Created ${metricsCreated} daily metrics records`);
 
-    // Step 12: Create sample ad metrics for analytics
-    console.log('\n📝 Step 12: Creating announcements...');
+    // Step 13: Create announcements
+    console.log('\n📝 Step 13: Creating announcements...');
 
-    // Get churches for targeting
     const graceChurch = await prisma.church.findFirst({
       where: { church_email: 'admin@gracechurch.org' },
     });
@@ -1189,12 +1394,10 @@ async function main() {
       where: { church_email: 'admin@faithassembly.org' },
     });
 
-    // Get super admin user
     const superAdminUser = await prisma.user.findFirst({
       where: { email: appConfig().defaultUser.system.email },
     });
 
-    // Get church admin users
     const graceChurchAdmin = await prisma.user.findFirst({
       where: { email: 'admin@gracechurch.org' },
     });
@@ -1358,7 +1561,7 @@ async function main() {
       `  📊 Total announcements created/found: ${announcementsCreated}/${announcementsData.length}`,
     );
 
-    // Step 13: Display Summary
+    // Step 14: Display Summary
     console.log('\n' + '='.repeat(60));
     console.log('📊 SEEDING SUMMARY');
     console.log('='.repeat(60));
@@ -1377,17 +1580,26 @@ async function main() {
     const totalRoleAssignments = await prisma.roleUser.count();
     console.log(`✅ Role assignments: ${totalRoleAssignments}`);
 
+    const totalPosts = await prisma.churchPost.count();
+    console.log(`✅ Church posts: ${totalPosts}`);
+
+    const totalComments = await prisma.churchComment.count();
+    console.log(`✅ Church comments: ${totalComments}`);
+
+    const totalReplies = await prisma.churchCommentReply.count();
+    console.log(`✅ Comment replies: ${totalReplies}`);
+
+    const totalReacts = await prisma.churchPostReact.count();
+    console.log(`✅ Post reacts: ${totalReacts}`);
+
     const totalAds = await prisma.ad.count();
     console.log(`✅ Total ads: ${totalAds}`);
 
-    const totalAdViews = await prisma.adView.count();
-    console.log(`✅ Total ad views tracked: ${totalAdViews}`);
-
-    const totalAdClicks = await prisma.adClick.count();
-    console.log(`✅ Total ad clicks tracked: ${totalAdClicks}`);
-
     const totalAdMetrics = await prisma.adMetrics.count();
     console.log(`✅ Total ad metric records: ${totalAdMetrics}`);
+
+    const totalAnnouncements = await prisma.announcement.count();
+    console.log(`✅ Total announcements: ${totalAnnouncements}`);
 
     // Verify data integrity
     const adminsWithoutMembership = await prisma.user.count({

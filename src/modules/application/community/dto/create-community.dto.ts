@@ -1,15 +1,19 @@
-import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-export class CreateCommunityDto {
-  @IsString()
+export class CreateCommunityPostDto {
+  @ApiProperty({ description: 'Church ID' })
   @IsNotEmpty()
-  @ApiProperty({ description: 'Community id', type: 'string' })
-  community_id: string;
-
   @IsString()
-  @IsNotEmpty()
-  @ApiProperty({ description: 'Post title', type: 'string' })
-  title: string;
+  church_id: string;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  content?: string;
 }

@@ -9,7 +9,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class CommunityUtils {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ----  get active church member ----------
+  // ---- get active church member ----------
   async getActiveChurchMember(userId: string, churchId: string) {
     const member = await this.prisma.churchMember.findFirst({
       where: {
@@ -22,74 +22,50 @@ export class CommunityUtils {
 
     if (!member) {
       throw new ForbiddenException(
-        'You are not an active member of this church community.',
+        'You are not an active member of this church.',
       );
     }
 
     return member;
   }
 
-  //  ------  get community with access check ------
-  async getCommunityWithAccess(communityId: string, userId: string) {
-    const community = await this.prisma.churchCommunity.findUnique({
-      where: {
-        id: communityId,
-      },
-      select: {
-        id: true,
-        church_id: true,
-        community_name: true,
-      },
+  // ------ get church with access check (replaces getCommunityWithAccess) ------
+  async getChurchWithAccess(churchId: string, userId: string) {
+    const church = await this.prisma.church.findUnique({
+      where: { id: churchId },
+      select: { id: true, church_name: true },
     });
 
-    if (!community) {
-      throw new NotFoundException('Community not found.');
+    if (!church) {
+      throw new NotFoundException('Church not found.');
     }
 
-    const member = await this.getActiveChurchMember(
-      userId,
-      community.church_id,
-    );
+    const member = await this.getActiveChurchMember(userId, church.id);
 
-    return {
-      community,
-      member,
-    };
+    return { church, member };
   }
 
-  //  ------  get post with access check ------
+  // ------ get post with access check (now ChurchPost) ------
   async getPostWithAccess(postId: string, userId: string) {
-    const post = await this.prisma.communityPost.findUnique({
-      where: {
-        id: postId,
-      },
+    const post = await this.prisma.churchPost.findUnique({
+      where: { id: postId },
       include: {
-        community: {
-          select: {
-            id: true,
-            church_id: true,
-            community_name: true,
-          },
+        church: {
+          select: { id: true, church_name: true },
         },
       },
     });
 
     if (!post) {
-      throw new NotFoundException('Community post not found.');
+      throw new NotFoundException('Church post not found.');
     }
 
-    const member = await this.getActiveChurchMember(
-      userId,
-      post.community.church_id,
-    );
+    const member = await this.getActiveChurchMember(userId, post.church_id);
 
-    return {
-      post,
-      member,
-    };
+    return { post, member };
   }
 
-  // ------  get my active member ids ------
+  // ------ get my active member ids ------
   async getMyActiveMemberIds(userId: string) {
     const memberships = await this.prisma.churchMember.findMany({
       where: {
@@ -97,15 +73,13 @@ export class CommunityUtils {
         status: 'ACTIVE',
         deleted_at: null,
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
 
     return memberships.map((member) => member.id);
   }
 
-  // ------  check if a specific membership id
+  // ------ check if a specific membership id belongs to user ------
   async isMyActiveMember(memberId: string, userId: string): Promise<boolean> {
     const member = await this.prisma.churchMember.findFirst({
       where: {
@@ -114,41 +88,37 @@ export class CommunityUtils {
         status: 'ACTIVE',
         deleted_at: null,
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
     if (member) return true;
 
     throw new ForbiddenException(
-      'You are not an active member of this church community.',
+      'You are not an active member of this church.',
     );
   }
 
-  // ------  build post access where condition ------
-  buildPostAccessWhere(userId: string, communityId?: string) {
+  // ------ build post access where condition (for ChurchPost) ------
+  buildPostAccessWhere(userId: string, churchId?: string) {
     const whereCondition: any = {
-      community: {
-        church: {
-          members: {
-            some: {
-              user_id: userId,
-              status: 'ACTIVE',
-              deleted_at: null,
-            },
+      church: {
+        members: {
+          some: {
+            user_id: userId,
+            status: 'ACTIVE',
+            deleted_at: null,
           },
         },
       },
     };
 
-    if (communityId) {
-      whereCondition.community_id = communityId;
+    if (churchId) {
+      whereCondition.church_id = churchId;
     }
 
     return whereCondition;
   }
 
-  // ------  pagination helper ------
+  // ------ pagination helper ------
   getPagination(page = 1, limit = 10) {
     const safePage = page > 0 ? page : 1;
     const safeLimit = limit > 0 ? limit : 10;
@@ -160,26 +130,18 @@ export class CommunityUtils {
     };
   }
 
-  // ------  get react counts for multiple posts ------
+  // ------ get react counts for multiple posts (ChurchPostReact) ------
   async getReactCounts(postIds: string[]) {
-    if (!postIds.length) {
-      return [];
-    }
+    if (!postIds.length) return [];
 
-    return this.prisma.communityPostReact.groupBy({
+    return this.prisma.churchPostReact.groupBy({
       by: ['post_id', 'react_type'],
-      where: {
-        post_id: {
-          in: postIds,
-        },
-      },
-      _count: {
-        _all: true,
-      },
+      where: { post_id: { in: postIds } },
+      _count: { _all: true },
     });
   }
 
-  // ------  format posts with react counts ------
+  // ------ format posts with react counts ------
   formatPostsWithReactCounts(posts: any[], reactCounts: any[]) {
     return posts.map((post) => {
       const likeCount =

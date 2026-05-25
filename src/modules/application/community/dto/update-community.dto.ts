@@ -1,4 +1,4 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateCommunityDto } from './create-community.dto';
+import { PartialType } from "@nestjs/swagger";
+import { CreateCommunityPostDto } from "./create-community.dto";
 
-export class UpdateCommunityDto extends PartialType(CreateCommunityDto) {}
+export class UpdateCommunityDto extends PartialType(CreateCommunityPostDto) {}

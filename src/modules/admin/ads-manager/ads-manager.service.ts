@@ -757,7 +757,7 @@ export class AdsService {
               : 0,
         }))
         .sort((a, b) => b.ctr - a.ctr)
-        .slice(0, 5);
+        .slice(0, 6);
 
       return {
         success: true,

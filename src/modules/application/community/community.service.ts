@@ -68,7 +68,6 @@ export class CommunityService {
     };
   }
 
-  
   // get all community posts
   async findAll(
     userId: string,
@@ -113,7 +112,6 @@ export class CommunityService {
       skip,
       take: perPage,
     });
-
 
     return {
       message: 'Community posts retrieved successfully.',
@@ -426,8 +424,4 @@ export class CommunityService {
       data: newReact,
     };
   }
-
-
-
-
 }

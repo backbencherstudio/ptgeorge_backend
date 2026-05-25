@@ -18,7 +18,11 @@ export class ConversationService {
     private readonly messageGateway: MessageGateway,
   ) { }
 
-  // *create conversation
+
+  
+
+
+  // create conversation
   async create(createConversationDto: CreateConversationDto, sender: string) {
 
     const { participant_id } = createConversationDto;
@@ -113,7 +117,7 @@ export class ConversationService {
     };
   }
 
-  //  *conversation list of user
+  //  conversation list of user
   async findAll(userId: string) {
 
     const conversations = await this.prisma.conversation.findMany({

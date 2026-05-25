@@ -224,7 +224,7 @@ export class AdsController {
   getDashboardAnalytics(@Req() req: any) {
     const userId = req.user?.userId;
     const isAdmin =
-      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'ADMIN';
+      req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'CHURCH_ADMIN';
     return this.adsService.getDashboardAnalytics(userId, isAdmin);
   }
 

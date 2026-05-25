@@ -1,30 +1,25 @@
 import {
   Controller,
-  Get,
   Post,
-  Body,
-  Patch,
-  Param,
+  Get,
   Delete,
+  Body,
+  Param,
+  Query,
   UseGuards,
   Req,
-  Query,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
 import { CommunityService } from './community.service';
-import { CreateCommunityDto } from './dto/create-community.dto';
-import { UpdateCommunityDto } from './dto/update-community.dto';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guard/role/roles.guard';
-import { Role } from 'src/common/guard/role/role.enum';
-import { Roles } from 'src/common/guard/role/roles.decorator';
 import { Request } from 'express';
 import { PaginationDto } from 'src/common/pagination/dto/offset-pagination.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { ReactPostDto } from './dto/create-react.dto';
-import { memoryStorage } from 'multer';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -35,76 +30,67 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
+import { CreateCommunityPostDto } from './dto/create-community.dto';
+import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@ApiTags('Community')
+@ApiBearerAuth(SWAGGER_AUTH.PASTOR)
+@ApiTags('Church Community')
 @ApiBearerAuth()
-@Controller('community')
+@Controller('church-community')
 export class CommunityController {
   constructor(private readonly communityService: CommunityService) {}
 
-  /*-----------------------------------
-           POST  PART
-  -----------------------------------*/
+  // -------------------- POSTS --------------------
 
-  // create community post
+  @Post('post')
   @UseInterceptors(
     FileInterceptor('image', {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  @ApiOperation({ summary: 'Create a community post' })
+  @ApiOperation({ summary: 'Create a church post' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        community_id: { type: 'string' },
-        title: { type: 'string' },
-        image: { type: 'string', format: 'binary' },
-      },
-    },
-  })
-  @Post()
-  async create(
-    @Body() createCommunityDto: CreateCommunityDto,
+  @ApiBody({ type: CreateCommunityPostDto })
+  @ApiResponse({ status: 201, description: 'Post created successfully.' })
+  async createPost(
+    @Body() dto: CreateCommunityPostDto,
     @Req() req: Request,
     @UploadedFile() image?: Express.Multer.File,
   ) {
-    const userId = req.user.userId;
-    return this.communityService.create(createCommunityDto, userId, image);
+    return this.communityService.createPost(dto, req.user.userId, image);
   }
 
-  // get all community posts
-  @ApiOperation({ summary: 'Get all community posts' })
-  @ApiParam({ name: 'communityId', description: 'Community id' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number' })
-  @ApiQuery({ name: 'perPage', required: false, type: Number, description: 'Items per page' })
-  @ApiResponse({ status: 200, description: 'Community posts retrieved successfully.' })
-  @Get('all-post/:communityId')
-  async findAll(
+  @Get('posts/:churchId')
+  @ApiOperation({ summary: 'Get all posts of a church' })
+  @ApiParam({ name: 'churchId', description: 'Church ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'perPage', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Posts retrieved.' })
+  async findAllPosts(
     @Req() req: Request,
-    @Query() paginationDto: PaginationDto,
-    @Param('communityId') communityId: string,
+    @Query() pagination: PaginationDto,
+    @Param('churchId') churchId: string,
   ) {
-    const userId = req.user.userId;
-    return this.communityService.findAll(userId, paginationDto, communityId);
+    return this.communityService.findAllPosts(
+      req.user.userId,
+      pagination,
+      churchId,
+    );
   }
 
-  // delete community post
-  @ApiOperation({ summary: 'Delete a community post' })
-  @Delete(':id')
-  async remove(@Req() req: Request, @Param('id') id: string) {
-    const userId = req.user.userId;
-    return this.communityService.remove(id, userId);
+  @Delete('post/:postId')
+  @ApiOperation({ summary: 'Delete a church post' })
+  @ApiParam({ name: 'postId', description: 'Post ID' })
+  @ApiResponse({ status: 200, description: 'Post deleted.' })
+  async removePost(@Req() req: Request, @Param('postId') postId: string) {
+    return this.communityService.removePost(postId, req.user.userId);
   }
 
-  /*-----------------------------------
-           COMMENT  PART
-  -----------------------------------*/
+  // -------------------- COMMENTS --------------------
 
-  // add comment to community post
+  @Post('post/:postId/comment')
   @UseInterceptors(
     FileInterceptor('image', {
       storage: memoryStorage(),
@@ -112,39 +98,38 @@ export class CommunityController {
     }),
   )
   @ApiOperation({ summary: 'Add comment to a post' })
+  @ApiParam({ name: 'postId', description: 'Post ID' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        comment: { type: 'string' },
-        image: { type: 'string', format: 'binary' },
-      },
-    },
-  })
-  @Post('post/:postId/comment')
+  @ApiBody({ type: CreateCommentDto })
+  @ApiResponse({ status: 201, description: 'Comment added.' })
   async addComment(
     @Param('postId') postId: string,
-    @Body() createCommentDto: CreateCommentDto,
+    @Body() dto: CreateCommentDto,
     @Req() req: Request,
     @UploadedFile() image?: Express.Multer.File,
   ) {
-    const userId = req.user.userId;
-    return this.communityService.addComment(postId, createCommentDto, userId, image);
+    return this.communityService.addComment(
+      postId,
+      dto,
+      req.user.userId,
+      image,
+    );
   }
 
-  // detete a comment
-  @ApiOperation({ summary: 'Delete a comment' })
   @Delete('comment/:commentId')
+  @ApiOperation({ summary: 'Delete a comment' })
+  @ApiParam({ name: 'commentId', description: 'Comment ID' })
+  @ApiResponse({ status: 200, description: 'Comment deleted.' })
   async deleteComment(
-    @Param('commentId') commentId: string,
     @Req() req: Request,
+    @Param('commentId') commentId: string,
   ) {
-    const userId = req.user.userId;
-    return this.communityService.deleteComment(commentId, userId);
+    return this.communityService.deleteComment(commentId, req.user.userId);
   }
 
-  // reply to comment
+  // -------------------- REPLIES --------------------
+
+  @Post('comment/:commentId/reply')
   @UseInterceptors(
     FileInterceptor('image', {
       storage: memoryStorage(),
@@ -152,67 +137,44 @@ export class CommunityController {
     }),
   )
   @ApiOperation({ summary: 'Reply to a comment' })
+  @ApiParam({ name: 'commentId', description: 'Comment ID' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        comment: { type: 'string' },
-        image: { type: 'string', format: 'binary' },
-      },
-    },
-  })
-  @Post('comment/:commentId/reply')
+  @ApiBody({ type: CreateCommentDto })
+  @ApiResponse({ status: 201, description: 'Reply added.' })
   async replyToComment(
     @Param('commentId') commentId: string,
-    @Body() createCommentDto: CreateCommentDto,
+    @Body() dto: CreateCommentDto,
     @Req() req: Request,
     @UploadedFile() image?: Express.Multer.File,
   ) {
-    const userId = req.user.userId;
     return this.communityService.replyToComment(
       commentId,
-      createCommentDto,
-      userId,
+      dto,
+      req.user.userId,
       image,
     );
   }
 
-  // delete reply to comment
-  @ApiOperation({ summary: 'Delete a reply to a comment' })
-  @Delete('comment/reply/:replyId')
-  async deleteReplyToComment(
-    @Param('replyId') replyId: string,
-    @Req() req: Request,
-  ) {
-    const userId = req.user.userId;
-    return this.communityService.deleteReplyToComment(replyId, userId);
+  @Delete('reply/:replyId')
+  @ApiOperation({ summary: 'Delete a reply' })
+  @ApiParam({ name: 'replyId', description: 'Reply ID' })
+  @ApiResponse({ status: 200, description: 'Reply deleted.' })
+  async deleteReply(@Req() req: Request, @Param('replyId') replyId: string) {
+    return this.communityService.deleteReplyToComment(replyId, req.user.userId);
   }
 
-  /*-----------------------------------
-           REACT  PART
-  -----------------------------------*/
+  // -------------------- REACTS --------------------
 
-  // react to community post
-  @ApiOperation({ summary: 'React to a community post' })
-  @UseInterceptors(
-    FileInterceptor('image', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 },
-    }),
-  )
   @Post('post/:postId/react')
+  @ApiOperation({ summary: 'React to a post (like/love)' })
+  @ApiParam({ name: 'postId', description: 'Post ID' })
+  @ApiBody({ type: ReactPostDto })
+  @ApiResponse({ status: 200, description: 'Reaction toggled.' })
   async reactToPost(
     @Param('postId') postId: string,
-    @Body() reactPostDto: ReactPostDto,
+    @Body() dto: ReactPostDto,
     @Req() req: Request,
-    @UploadedFile() image?: Express.Multer.File,
   ) {
-    const userId = req.user.userId;
-    return this.communityService.reactToPost(
-      postId, 
-      reactPostDto, 
-      userId
-    );
+    return this.communityService.reactToPost(postId, dto, req.user.userId);
   }
 }

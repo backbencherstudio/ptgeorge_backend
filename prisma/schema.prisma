@@ -175,7 +175,7 @@ model Ucode {
 
 /**
  * ---------------------------------------------------------------------
- * Church Schema (Simplified - No Community)
+ * Church Schema with Posts, Comments, Reacts (No Community Layer)
  * ---------------------------------------------------------------------
  */
 
@@ -198,6 +198,11 @@ enum ChurchMemberStatus {
   ACTIVE
   INACTIVE
   REMOVED
+}
+
+enum ReactType {
+  LIKE
+  LOVE
 }
 
 model Church {
@@ -225,6 +230,7 @@ model Church {
 
   roleUsers RoleUser[]
   members   ChurchMember[] @relation("ChurchToMembers")
+  posts     ChurchPost[]   @relation("ChurchToPosts")
 
   @@map("churches")
 }
@@ -249,11 +255,108 @@ model ChurchMember {
   approved_at DateTime?
   notes       String?   @db.Text
 
+  // Posts, comments, reacts directly under member
+  posts   ChurchPost[]        @relation("MemberToPosts")
+  comments ChurchComment[]    @relation("MemberToComments")
+  reacts   ChurchPostReact[]  @relation("MemberToReacts")
+  replies  ChurchCommentReply[] @relation("MemberToCommentReplies")
+
   @@unique([church_id, user_id])
   @@index([church_id])
   @@index([user_id])
   @@index([status])
   @@map("church_members")
+}
+
+// Church Post (Directly under Church, no Community)
+model ChurchPost {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+  deleted_at DateTime?
+
+  image String?
+  content String? @db.Text
+
+  church_id String
+  church    Church @relation("ChurchToPosts", fields: [church_id], references: [id], onDelete: Cascade)
+
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToPosts", fields: [church_member_id], references: [id], onDelete: Cascade)
+
+  comments ChurchComment[]    @relation("PostToComments")
+  reacts   ChurchPostReact[]  @relation("PostToReacts")
+
+  @@index([church_id])
+  @@index([church_member_id])
+  @@index([created_at])
+  @@map("church_posts")
+}
+
+// Church Comment
+model ChurchComment {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+  deleted_at DateTime?
+
+  content String @db.Text
+  image   String?
+
+  post_id String
+  post    ChurchPost @relation("PostToComments", fields: [post_id], references: [id], onDelete: Cascade)
+
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToComments", fields: [church_member_id], references: [id], onDelete: Cascade)
+
+  replies ChurchCommentReply[] @relation("CommentToReplies")
+
+  @@index([post_id])
+  @@index([church_member_id])
+  @@index([created_at])
+  @@map("church_comments")
+}
+
+// Church Comment Reply
+model ChurchCommentReply {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+  deleted_at DateTime?
+
+  content String @db.Text
+  image   String?
+
+  comment_id String
+  comment    ChurchComment @relation("CommentToReplies", fields: [comment_id], references: [id], onDelete: Cascade)
+
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToCommentReplies", fields: [church_member_id], references: [id], onDelete: Cascade)
+
+  @@index([comment_id])
+  @@index([church_member_id])
+  @@index([created_at])
+  @@map("church_comment_replies")
+}
+
+// Church Post React
+model ChurchPostReact {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  react_type ReactType @default(LOVE)
+
+  post_id String
+  post    ChurchPost @relation("PostToReacts", fields: [post_id], references: [id], onDelete: Cascade)
+
+  church_member_id String
+  church_member    ChurchMember @relation("MemberToReacts", fields: [church_member_id], references: [id], onDelete: Cascade)
+
+  @@unique([post_id, church_member_id])
+  @@index([post_id])
+  @@index([church_member_id])
+  @@map("church_post_reacts")
 }
 
 /**
@@ -405,22 +508,18 @@ model Ad {
   status    AdStatus    @default(ACTIVE)
   placement AdPlacement @default(HOME_BANNER)
 
-  country String? // e.g., "USA", "Canada"
-  city    String? // e.g., "New York", "Los Angeles" (optional)
+  country String?
+  city    String?
 
-  // Date range
   start_date DateTime
   end_date   DateTime
 
-  // Analytics
   total_views  Int @default(0)
   total_clicks Int @default(0)
 
-  // User tracking (who created the ad)
   created_by_id String
   created_by    User   @relation("UserCreatedAds", fields: [created_by_id], references: [id])
 
-  // Analytics tracking
   ad_views   AdView[]
   ad_clicks  AdClick[]
   ad_metrics AdMetrics[]
@@ -515,14 +614,11 @@ model Announcement {
   status   AnnouncementStatus   @default(UNPUBLISHED)
   audience AnnouncementAudience @default(ALL_USERS)
 
-  // Date range
   start_date DateTime
   end_date   DateTime
 
-  // Target churches - empty array = all churches, has IDs = specific churches only
   target_church_ids String[]
 
-  // User tracking (who created the announcement)
   created_by_id String
   created_by    User   @relation("UserCreatedAnnouncements", fields: [created_by_id], references: [id], onDelete: Cascade)
 

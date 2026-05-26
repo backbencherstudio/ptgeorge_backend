@@ -48,7 +48,7 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   // me super_admin-token
-  @ApiBearerAuth('super_admin-token')
+  @ApiBearerAuth('pro_user-token')
   @ApiOperation({
     summary: 'Get current user details',
     description: 'Retrieve authenticated user information',

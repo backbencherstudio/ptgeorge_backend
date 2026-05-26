@@ -4,6 +4,10 @@ import { IsArray, IsNotEmpty } from 'class-validator';
 
 export class CreateSkillDto {
  
+  @ApiProperty({
+    example: 'TypeScript',
+    description: 'Name of the skill',
+  })
   @IsNotEmpty()
   skill_name: string;
 }

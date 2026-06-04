@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApprovalType,
@@ -18,10 +19,83 @@ import {
   ChurchMemberStatus,
 } from 'prisma/generated/enums';
 import { Role } from 'src/common/guard/role/role.enum';
+import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
 
 @Injectable()
 export class ProUserService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ProUserService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
+
+  // ─── Helper: Create audit log ─────────────────────────────────────────────────
+  private async createAuditLog(
+    userId: string | undefined,
+    action: string,
+    target: string,
+    churchId?: string | null,
+    churchName?: string | null,
+  ) {
+    try {
+      if (!userId) {
+        this.logger.log('No userId provided for audit log, skipping...');
+        return;
+      }
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { churchUser: true },
+      });
+
+      if (!user) {
+        this.logger.log(`User with id ${userId} not found for audit log`);
+        return;
+      }
+
+      let actorName: string = user.type;
+      if (user.first_name && user.last_name) {
+        actorName = `${user.first_name} ${user.last_name}`;
+      } else if (user.first_name) {
+        actorName = user.first_name;
+      }
+
+      let finalChurchName = churchName;
+      let finalChurchId = churchId;
+
+      if (churchId && !finalChurchName) {
+        const church = await this.prisma.church.findUnique({
+          where: { id: churchId },
+        });
+        if (church) {
+          finalChurchName = church.church_name;
+        }
+      }
+
+      if (
+        user.type === 'CHURCH_ADMIN' &&
+        !finalChurchId &&
+        user.churchUser &&
+        user.churchUser.length > 0
+      ) {
+        finalChurchId = user.churchUser[0].id;
+        finalChurchName = user.churchUser[0].church_name;
+      }
+
+      await this.auditLogService.createLog({
+        actor: actorName,
+        action: action,
+        target: target,
+        church: finalChurchName || '--',
+        actor_id: userId,
+        actor_type: user.type,
+        church_id: finalChurchId || null,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to create audit log: ${error.message}`);
+    }
+  }
 
   async getAllProUsers(query: GetProUsersDto) {
     const {
@@ -297,7 +371,7 @@ export class ProUserService {
           include: { role: true },
         },
         church_memberships: {
-          where: { deleted_at: null }, // ✅ Include ALL memberships, not just ACTIVE
+          where: { deleted_at: null },
           include: { church: true },
         },
       },
@@ -307,8 +381,8 @@ export class ProUserService {
       throw new NotFoundException('User not found');
     }
 
-    // ✅ Get the church membership (could be PENDING or ACTIVE)
-    const membership = user.church_memberships[0]; // Take the first membership
+    // Get the church membership (could be PENDING or ACTIVE)
+    const membership = user.church_memberships[0];
 
     if (!membership) {
       throw new BadRequestException('User is not associated with any church');
@@ -316,7 +390,7 @@ export class ProUserService {
 
     const churchId = membership.church_id;
 
-    // ✅ Check if user already has helper or member role
+    // Check if user already has helper or member role
     const existingRole = user.roles_assigned_to_me.find(
       (ru) =>
         ru.role.name === Role.HELPER || ru.role.name === Role.CHURCH_MEMBER,
@@ -379,7 +453,7 @@ export class ProUserService {
       const updatedMembership = await tx.churchMember.update({
         where: { id: membership.id },
         data: {
-          status: ChurchMemberStatus.ACTIVE, // ✅ Change from PENDING to ACTIVE
+          status: ChurchMemberStatus.ACTIVE,
           church_role: roleName === Role.HELPER ? 'Helper' : 'Member',
           approved_by: adminId,
           approved_at: new Date(),
@@ -416,6 +490,20 @@ export class ProUserService {
     // Create notification for the user
     await this.createApprovalNotification(user.id, approvalType);
 
+    // Create audit log
+    const targetName = `${user.first_name} ${user.last_name}`.trim();
+    const roleDisplayName =
+      roleName === Role.HELPER ? 'Helper' : 'Church Member';
+    const churchName = membership.church?.church_name || 'Unknown Church';
+
+    await this.createAuditLog(
+      adminId,
+      'APPROVED_PRO_USER',
+      `${targetName} approved as ${roleDisplayName} for ${churchName}`,
+      churchId,
+      churchName,
+    );
+
     // Get updated user with role
     const updatedUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -450,6 +538,170 @@ export class ProUserService {
           joined_at: result.membership.joined_at,
           approved_at: result.membership.approved_at,
         },
+      },
+    };
+  }
+
+  async rejectUser(userId: string, adminId: string, reason?: string) {
+    // Check if user exists
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        deleted_at: null,
+      },
+      include: {
+        church_memberships: {
+          where: { deleted_at: null },
+          include: { church: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if user is already approved
+    if (user.status === UserStatus.ACTIVE) {
+      throw new BadRequestException('User is already approved');
+    }
+
+    // Update user status to REJECTED
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: UserStatus.REJECTED,
+      },
+    });
+
+    // Create audit log
+    const targetName = `${user.first_name} ${user.last_name}`.trim();
+    const churchName =
+      user.church_memberships[0]?.church?.church_name || 'Unknown Church';
+    const churchId = user.church_memberships[0]?.church_id;
+
+    await this.createAuditLog(
+      adminId,
+      'REJECTED_PRO_USER',
+      `${targetName} rejected${reason ? ` - Reason: ${reason}` : ''}`,
+      churchId,
+      churchName,
+    );
+
+    return {
+      success: true,
+      message: 'User rejected successfully',
+      data: {
+        user_id: userId,
+        status: 'REJECTED',
+        rejected_at: new Date(),
+      },
+    };
+  }
+
+  async suspendUser(userId: string, adminId: string, reason?: string) {
+    // Check if user exists
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        deleted_at: null,
+      },
+      include: {
+        church_memberships: {
+          where: { deleted_at: null },
+          include: { church: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Update user status to SUSPENDED
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: UserStatus.SUSPENDED,
+      },
+    });
+
+    // Create audit log
+    const targetName = `${user.first_name} ${user.last_name}`.trim();
+    const churchName =
+      user.church_memberships[0]?.church?.church_name || 'Unknown Church';
+    const churchId = user.church_memberships[0]?.church_id;
+
+    await this.createAuditLog(
+      adminId,
+      'SUSPENDED_PRO_USER',
+      `${targetName} suspended${reason ? ` - Reason: ${reason}` : ''}`,
+      churchId,
+      churchName,
+    );
+
+    return {
+      success: true,
+      message: 'User suspended successfully',
+      data: {
+        user_id: userId,
+        status: 'SUSPENDED',
+        suspended_at: new Date(),
+      },
+    };
+  }
+
+  async activateUser(userId: string, adminId: string) {
+    // Check if user exists
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        deleted_at: null,
+      },
+      include: {
+        church_memberships: {
+          where: { deleted_at: null },
+          include: { church: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Update user status to ACTIVE
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: UserStatus.ACTIVE,
+      },
+    });
+
+    // Create audit log
+    const targetName = `${user.first_name} ${user.last_name}`.trim();
+    const churchName =
+      user.church_memberships[0]?.church?.church_name || 'Unknown Church';
+    const churchId = user.church_memberships[0]?.church_id;
+
+    await this.createAuditLog(
+      adminId,
+      'ACTIVATED_PRO_USER',
+      `${targetName} activated`,
+      churchId,
+      churchName,
+    );
+
+    return {
+      success: true,
+      message: 'User activated successfully',
+      data: {
+        user_id: userId,
+        status: 'ACTIVE',
+        activated_at: new Date(),
       },
     };
   }

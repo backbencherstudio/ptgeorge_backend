@@ -8,12 +8,83 @@ import {
   AnnouncementStatus,
 } from 'prisma/generated/enums';
 import { Prisma } from 'prisma/generated/browser';
+import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
 
 @Injectable()
 export class AnnouncementsService {
   private readonly logger = new Logger(AnnouncementsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
+
+  // ─── Helper: Create audit log ─────────────────────────────────────────────────
+  private async createAuditLog(
+    userId: string | undefined,
+    action: string,
+    target: string,
+    churchId?: string | null,
+    churchName?: string | null,
+  ) {
+    try {
+      if (!userId) {
+        this.logger.log('No userId provided for audit log, skipping...');
+        return;
+      }
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { churchUser: true },
+      });
+
+      if (!user) {
+        this.logger.log(`User with id ${userId} not found for audit log`);
+        return;
+      }
+
+      let actorName: string = user.type;
+      if (user.first_name && user.last_name) {
+        actorName = `${user.first_name} ${user.last_name}`;
+      } else if (user.first_name) {
+        actorName = user.first_name;
+      }
+
+      let finalChurchName = churchName;
+      let finalChurchId = churchId;
+
+      if (churchId && !finalChurchName) {
+        const church = await this.prisma.church.findUnique({
+          where: { id: churchId },
+        });
+        if (church) {
+          finalChurchName = church.church_name;
+        }
+      }
+
+      if (
+        user.type === 'CHURCH_ADMIN' &&
+        !finalChurchId &&
+        user.churchUser &&
+        user.churchUser.length > 0
+      ) {
+        finalChurchId = user.churchUser[0].id;
+        finalChurchName = user.churchUser[0].church_name;
+      }
+
+      await this.auditLogService.createLog({
+        actor: actorName,
+        action: action,
+        target: target,
+        church: finalChurchName || '--',
+        actor_id: userId,
+        actor_type: user.type,
+        church_id: finalChurchId || null,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to create audit log: ${error.message}`);
+    }
+  }
 
   async create(
     createDto: CreateAnnouncementDto,
@@ -115,6 +186,27 @@ export class AnnouncementsService {
 
       const now = new Date();
       const isActive = announcement.status === AnnouncementStatus.PUBLISHED;
+
+      // Create audit log
+      const audienceText =
+        announcement.audience === 'ALL_USERS'
+          ? 'All Users'
+          : announcement.audience === 'CHURCH_ADMINS_ONLY'
+            ? 'Church Admins Only'
+            : announcement.audience === 'SUPER_ADMINS_ONLY'
+              ? 'Super Admins Only'
+              : 'Specific Churches';
+      const churchText =
+        finalTargetChurchIds.length > 0
+          ? ` for ${finalTargetChurchIds.length} church(es)`
+          : '';
+      await this.createAuditLog(
+        userId,
+        'CREATED_ANNOUNCEMENT',
+        `${announcement.title} - ${audienceText}${churchText}`,
+        userChurchId,
+        null,
+      );
 
       return {
         success: true,
@@ -405,6 +497,28 @@ export class AnnouncementsService {
       const now = new Date();
       const isActive = updated.status === AnnouncementStatus.PUBLISHED;
 
+      // Create audit log
+      const changes = [];
+      if (updateDto.title && updateDto.title !== announcement.title)
+        changes.push(`title: ${announcement.title} → ${updateDto.title}`);
+      if (updateDto.status && updateDto.status !== announcement.status)
+        changes.push(`status: ${announcement.status} → ${updateDto.status}`);
+      if (updateDto.audience && updateDto.audience !== announcement.audience)
+        changes.push(
+          `audience: ${announcement.audience} → ${updateDto.audience}`,
+        );
+      if (updateDto.message && updateDto.message !== announcement.message)
+        changes.push(`message updated`);
+
+      const changeText = changes.length > 0 ? ` (${changes.join(', ')})` : '';
+      await this.createAuditLog(
+        userId,
+        'UPDATED_ANNOUNCEMENT',
+        `${announcement.title} → ${updated.title}${changeText}`,
+        null,
+        null,
+      );
+
       return {
         success: true,
         statusCode: 200,
@@ -425,27 +539,62 @@ export class AnnouncementsService {
   }
 
   async publish(id: string, userId: string, isAdmin: boolean = false) {
-    return this.update(
+    const announcement = await this.prisma.announcement.findFirst({
+      where: { id, deleted_at: null },
+      select: { title: true, status: true },
+    });
+
+    const result = await this.update(
       id,
       { status: AnnouncementStatus.PUBLISHED },
       userId,
       isAdmin,
     );
+
+    if (result.success && announcement) {
+      await this.createAuditLog(
+        userId,
+        'PUBLISHED_ANNOUNCEMENT',
+        `${announcement.title} was published`,
+        null,
+        null,
+      );
+    }
+
+    return result;
   }
 
   async unpublish(id: string, userId: string, isAdmin: boolean = false) {
-    return this.update(
+    const announcement = await this.prisma.announcement.findFirst({
+      where: { id, deleted_at: null },
+      select: { title: true, status: true },
+    });
+
+    const result = await this.update(
       id,
       { status: AnnouncementStatus.UNPUBLISHED },
       userId,
       isAdmin,
     );
+
+    if (result.success && announcement) {
+      await this.createAuditLog(
+        userId,
+        'UNPUBLISHED_ANNOUNCEMENT',
+        `${announcement.title} was unpublished`,
+        null,
+        null,
+      );
+    }
+
+    return result;
   }
 
   async remove(id: string, userId: string, isAdmin: boolean = false) {
     try {
       const announcement = await this.prisma.announcement.findFirst({
         where: { id, deleted_at: null },
+        select: { title: true, audience: true, created_by_id: true },
       });
 
       if (!announcement) {
@@ -470,6 +619,15 @@ export class AnnouncementsService {
       });
 
       this.logger.log(`Announcement deleted: ${id} by user ${userId}`);
+
+      // Create audit log
+      await this.createAuditLog(
+        userId,
+        'DELETED_ANNOUNCEMENT',
+        `${announcement.title} (${announcement.audience})`,
+        null,
+        null,
+      );
 
       return {
         success: true,

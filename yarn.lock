@@ -2351,6 +2351,13 @@
     pg-protocol "*"
     pg-types "^4.0.1"
 
+"@types/play-sound@^1.1.2":
+  version "1.1.2"
+  resolved "https://registry.yarnpkg.com/@types/play-sound/-/play-sound-1.1.2.tgz#ecee1ecbc634ddfe5763f53e83847861825fa159"
+  integrity sha512-alq2D5sBtVcq5bzL/yLr5SSQ7B4VTIkX728V3nYfo6TaCtnwFLdHsFgy+N9oCjh67OOZQnj7kkJauWNW0L8bWw==
+  dependencies:
+    "@types/node" "*"
+
 "@types/pug@^2.0.10":
   version "2.0.10"
   resolved "https://registry.yarnpkg.com/@types/pug/-/pug-2.0.10.tgz#52f8dbd6113517aef901db20b4f3fca543b88c1f"

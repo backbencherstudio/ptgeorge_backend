@@ -88,6 +88,7 @@
     "@types/nodemailer": "6.4.17",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/passport-local": "1.0.38",
+    "@types/play-sound": "^1.1.2",
     "@types/qrcode": "^1.5.5",
     "@types/speakeasy": "2.0.10",
     "@types/supertest": "6.0.3",

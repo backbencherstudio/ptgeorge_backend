@@ -1561,7 +1561,629 @@ async function main() {
       `  📊 Total announcements created/found: ${announcementsCreated}/${announcementsData.length}`,
     );
 
-    // Step 14: Display Summary
+    // Step 14: Create Audit Logs (after announcements)
+    console.log('\n📝 Step 14: Creating audit logs...');
+
+    // Get all users for actor references
+    const allUsers = await prisma.user.findMany({
+      include: {
+        churchUser: true,
+        church_memberships: {
+          include: { church: true },
+        },
+      },
+    });
+
+    // Helper function to safely get actor_id
+    const getActorId = (user: any, actorName: string) => {
+      if (user?.id) return user.id;
+      console.log(`  ⚠️ Warning: ${actorName} user not found, using fallback`);
+      return null;
+    };
+
+    // Helper function to safely get church_id
+    const getChurchId = (church: any, churchName: string) => {
+      if (church?.id) return church.id;
+      console.log(`  ⚠️ Warning: ${churchName} church not found`);
+      return null;
+    };
+
+    // Sample Audit Logs Data
+    const auditLogsData = [
+      // ============================================
+      // SUPER ADMIN ACTIONS
+      // ============================================
+      {
+        actor: 'Super Admin',
+        action: 'Deleted Permission',
+        target: 'Manage Churches',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2026-02-14T17:08:25.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Deleted Permission',
+        target: 'James Cole — Grace NY',
+        church: 'Grace Community Church',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-11T09:14:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Deleted Permission',
+        target: 'Henry Park',
+        church: 'Hope Chapel',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-11T09:14:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Deleted Permission',
+        target: 'Bible Study App',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-11T09:14:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Deleted Permission',
+        target: 'Platform Maintenance',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-11T09:14:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Deleted Permission',
+        target: 'Hope Chapel',
+        church: 'Hope Chapel',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-11T09:14:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Deleted Permission',
+        target: 'Amara Diallo → Helper',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-11T09:14:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Deleted Permission',
+        target: 'Lisa Chen',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-11T09:14:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Assigned Role',
+        target: 'John Smith → Church Admin',
+        church: 'Grace Community Church',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-10T10:30:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Assigned Role',
+        target: 'Michael Johnson → Church Admin',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-09T14:20:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Created Church',
+        target: 'Grace Community Church',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-01T09:00:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Created Church',
+        target: 'Faith Assembly Church',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-01T10:15:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Activated User',
+        target: 'pastor@gracechurch.org',
+        church: 'Grace Community Church',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-05T11:45:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Suspended User',
+        target: 'suspended_user@example.com',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-08T16:30:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Created Announcement',
+        target: 'Platform Maintenance — Feb 15',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-08T12:00:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Created Ad',
+        target: 'Bible Study App – DigiSanctuary',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-01-10T08:00:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Updated Permission',
+        target: 'manage_church_members',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-12T15:20:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Exported Audit Logs',
+        target: 'audit-logs-2025-02-12.csv',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-12T18:00:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Created Role',
+        target: 'Worship Leader',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-13T11:00:00.000Z'),
+      },
+      {
+        actor: 'Super Admin',
+        action: 'Updated System Settings',
+        target: 'Email notification preferences',
+        church: '--',
+        actor_id: getActorId(superAdminUser, 'Super Admin'),
+        actor_type: 'SUPER_ADMIN',
+        church_id: null,
+        created_at: new Date('2025-02-11T14:30:00.000Z'),
+      },
+
+      // ============================================
+      // CHURCH ADMIN ACTIONS - Grace Community Church
+      // ============================================
+      {
+        actor: 'John Smith',
+        action: 'Added Church Member',
+        target: 'pastor@gracechurch.org → Pastor',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-15T09:30:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Assigned Role',
+        target: 'pastor@gracechurch.org → Pastor',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-15T09:35:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Added Church Member',
+        target: 'helper@gracechurch.org → Helper',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-16T10:00:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Assigned Role',
+        target: 'helper@gracechurch.org → Helper',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-16T10:05:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Created Church Post',
+        target: 'Amazing worship service this Sunday!',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-14T14:00:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Updated Church Settings',
+        target: 'Church description and service times',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-10T11:20:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Created Announcement',
+        target: 'Grace Church Christmas Service',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-12-20T09:00:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Removed Church Member',
+        target: 'inactive_member@gracechurch.org',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-18T13:45:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Updated Member Role',
+        target: 'member@gracechurch.org → Church Leader',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-17T15:30:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Deleted Church Post',
+        target: 'Outdated event announcement',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-13T16:00:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Approved Church Member',
+        target: 'new_member@gracechurch.org',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-12T09:00:00.000Z'),
+      },
+      {
+        actor: 'John Smith',
+        action: 'Exported Member List',
+        target: 'grace-church-members.csv',
+        church: 'Grace Community Church',
+        actor_id: getActorId(
+          graceChurchAdmin,
+          'John Smith (Grace Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-19T16:20:00.000Z'),
+      },
+
+      // ============================================
+      // CHURCH ADMIN ACTIONS - Faith Assembly Church
+      // ============================================
+      {
+        actor: 'Michael Johnson',
+        action: 'Added Church Member',
+        target: 'pastor@faithassembly.org → Pastor',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-14T11:00:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Assigned Role',
+        target: 'pastor@faithassembly.org → Pastor',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-14T11:05:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Added Church Member',
+        target: 'helper@faithassembly.org → Helper',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-15T09:00:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Assigned Role',
+        target: 'member@faithassembly.org → Church Member',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-16T10:30:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Created Church Post',
+        target: 'Faith Assembly Church Revival',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-12T15:00:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Updated Church Settings',
+        target: 'Service times and location',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-11T13:45:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Created Announcement',
+        target: 'Faith Assembly Church Revival',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-03-10T08:30:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Exported Member List',
+        target: 'faith-church-members.csv',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-15T14:20:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Removed Church Member',
+        target: 'inactive@faithassembly.org',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-17T11:00:00.000Z'),
+      },
+      {
+        actor: 'Michael Johnson',
+        action: 'Updated Church Banner',
+        target: 'New worship banner image',
+        church: 'Faith Assembly Church',
+        actor_id: getActorId(
+          faithChurchAdmin,
+          'Michael Johnson (Faith Church Admin)',
+        ),
+        actor_type: 'CHURCH_ADMIN',
+        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
+        created_at: new Date('2025-02-13T10:15:00.000Z'),
+      },
+
+      // ============================================
+      // REGULAR USER ACTIONS
+      // ============================================
+      {
+        actor: 'Father Michael Anderson',
+        action: 'Created Post',
+        target: 'Sunday sermon notes',
+        church: 'Grace Community Church',
+        actor_id: allUsers.find((u) => u.email === 'pastor@gracechurch.org')
+          ?.id,
+        actor_type: 'USER',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-17T08:00:00.000Z'),
+      },
+      {
+        actor: 'David Kim',
+        action: 'Commented on Post',
+        target: 'Great message!',
+        church: 'Grace Community Church',
+        actor_id: allUsers.find((u) => u.email === 'helper@gracechurch.org')
+          ?.id,
+        actor_type: 'USER',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-17T09:15:00.000Z'),
+      },
+      {
+        actor: 'Emily Rodriguez',
+        action: 'Reacted to Post',
+        target: 'Liked the announcement',
+        church: 'Grace Community Church',
+        actor_id: allUsers.find((u) => u.email === 'member@gracechurch.org')
+          ?.id,
+        actor_type: 'USER',
+        church_id: getChurchId(graceChurch, 'Grace Community Church'),
+        created_at: new Date('2025-02-17T09:30:00.000Z'),
+      },
+    ];
+
+    // Insert audit logs
+    let auditLogsCreated = 0;
+    for (const logData of auditLogsData) {
+      // Skip if required actor_id is missing
+      if (logData.actor_id === undefined || logData.actor_id === null) {
+        if (logData.actor !== 'Super Admin' || !superAdminUser) {
+          console.log(
+            `  ⚠️ Skipping audit log "${logData.action}" - actor not found`,
+          );
+          continue;
+        }
+      }
+
+      const existingLog = await prisma.auditLog.findFirst({
+        where: {
+          actor: logData.actor,
+          action: logData.action,
+          target: logData.target,
+          created_at: logData.created_at,
+        },
+      });
+
+      if (!existingLog) {
+        await prisma.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actor: logData.actor,
+            action: logData.action,
+            target: logData.target,
+            church: logData.church,
+            actor_id: logData.actor_id,
+            actor_type: logData.actor_type,
+            church_id: logData.church_id,
+            created_at: logData.created_at,
+          },
+        });
+        auditLogsCreated++;
+      }
+    }
+    console.log(`  ✅ Created ${auditLogsCreated} audit log records`);
+
+    // Display recent audit logs by type
+    const superAdminLogs = await prisma.auditLog.count({
+      where: { actor_type: 'SUPER_ADMIN' },
+    });
+    const churchAdminLogs = await prisma.auditLog.count({
+      where: { actor_type: 'CHURCH_ADMIN' },
+    });
+    const userLogs = await prisma.auditLog.count({
+      where: { actor_type: 'USER' },
+    });
+
+    console.log(`  📊 Audit logs breakdown:`);
+    console.log(`     - Super Admin actions: ${superAdminLogs}`);
+    console.log(`     - Church Admin actions: ${churchAdminLogs}`);
+    console.log(`     - User actions: ${userLogs}`);
+
+    // Step 15: Display Summary (update the existing summary)
     console.log('\n' + '='.repeat(60));
     console.log('📊 SEEDING SUMMARY');
     console.log('='.repeat(60));
@@ -1600,6 +2222,9 @@ async function main() {
 
     const totalAnnouncements = await prisma.announcement.count();
     console.log(`✅ Total announcements: ${totalAnnouncements}`);
+
+    const totalAuditLogs = await prisma.auditLog.count();
+    console.log(`✅ Total audit logs: ${totalAuditLogs}`);
 
     // Verify data integrity
     const adminsWithoutMembership = await prisma.user.count({

@@ -24,4 +24,14 @@ export class QueryChurchDto {
   @IsInt()
   @Min(1)
   limit: number = 10;
+
+  @ApiPropertyOptional({
+    description:
+      'Comma-separated list of fields to return (e.g., fields=id,church_name,church_city)',
+    example: 'id,church_name,church_city,status',
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  fields?: string;
 }

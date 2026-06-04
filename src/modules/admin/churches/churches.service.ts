@@ -10,7 +10,7 @@ export class ChurchesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(query: QueryChurchDto) {
-    const { page = 1, limit = 10, search } = query;
+    const { page = 1, limit = 10, search, fields: fieldsString } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ChurchWhereInput = {
@@ -29,25 +29,53 @@ export class ChurchesService {
       ];
     }
 
+    // Define all available fields with their types
+    const allFields = {
+      id: true,
+      church_name: true,
+      church_city: true,
+      church_email: true,
+      church_domain: true,
+      church_adminname: true,
+      church_members: true,
+      status: true,
+      auth_type: true,
+      created_at: true,
+      updated_at: true,
+    } as const;
+
+    // Parse fields string to array if provided
+    let select: Record<string, boolean>;
+
+    if (fieldsString && fieldsString.trim()) {
+      // Split the comma-separated string and trim whitespace
+      const requestedFields = fieldsString
+        .split(',')
+        .map((field) => field.trim());
+
+      // Build select object with requested fields
+      select = {};
+      requestedFields.forEach((field) => {
+        if (field in allFields) {
+          select[field] = true;
+        }
+      });
+
+      // If no valid fields were requested, fall back to all fields
+      if (Object.keys(select).length === 0) {
+        select = { ...allFields };
+      }
+    } else {
+      select = { ...allFields };
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.church.findMany({
         where,
         skip,
         take: limit,
         orderBy: { created_at: 'desc' },
-        select: {
-          id: true,
-          church_name: true,
-          church_city: true,
-          church_email: true,
-          church_domain: true,
-          church_adminname: true,
-          church_members: true,
-          status: true,
-          auth_type: true,
-          created_at: true,
-          updated_at: true,
-        },
+        select,
       }),
       this.prisma.church.count({ where }),
     ]);

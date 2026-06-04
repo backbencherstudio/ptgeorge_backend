@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CreateAdDto } from './dto/create-ad.dto';
 import { UpdateAdDto } from './dto/update-ad.dto';
 import { AdQueryDto } from './dto/ad-query.dto';
@@ -9,6 +6,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { ConfigService } from '@nestjs/config';
 import { AdStatus, Prisma } from 'prisma/generated/browser';
+import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
 
 @Injectable()
 export class AdsService {
@@ -19,7 +17,7 @@ export class AdsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
-    // Remove storageBasePath from constructor parameters
+    private readonly auditLogService: AuditLogService,
   ) {
     this.appUrl =
       this.configService.get<string>('app.url') || 'http://localhost:3000';
@@ -30,9 +28,7 @@ export class AdsService {
 
   private getFullUrl(relativePath: string): string {
     if (!relativePath) return '';
-    // Remove leading slash if exists
     const cleanPath = relativePath.replace(/^\//, '');
-    // Combine with storage base path
     return `${this.appUrl}${this.storageBasePath}/${cleanPath}`;
   }
 
@@ -41,6 +37,73 @@ export class AdsService {
     if (country && city) return `${city}, ${country}`;
     if (country) return country;
     return city || 'All Locations';
+  }
+
+  // ─── Helper: Create audit log ─────────────────────────────────────────────────
+  private async createAuditLog(
+    userId: string | undefined,
+    action: string,
+    target: string,
+    churchId?: string | null,
+    churchName?: string | null,
+  ) {
+    try {
+      if (!userId) {
+        this.logger.log('No userId provided for audit log, skipping...');
+        return;
+      }
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { churchUser: true },
+      });
+
+      if (!user) {
+        this.logger.log(`User with id ${userId} not found for audit log`);
+        return;
+      }
+
+      let actorName: string = user.type;
+      if (user.first_name && user.last_name) {
+        actorName = `${user.first_name} ${user.last_name}`;
+      } else if (user.first_name) {
+        actorName = user.first_name;
+      }
+
+      let finalChurchName = churchName;
+      let finalChurchId = churchId;
+
+      if (churchId && !finalChurchName) {
+        const church = await this.prisma.church.findUnique({
+          where: { id: churchId },
+        });
+        if (church) {
+          finalChurchName = church.church_name;
+        }
+      }
+
+      if (
+        user.type === 'CHURCH_ADMIN' &&
+        !finalChurchId &&
+        user.churchUser &&
+        user.churchUser.length > 0
+      ) {
+        finalChurchId = user.churchUser[0].id;
+        finalChurchName = user.churchUser[0].church_name;
+      }
+
+      await this.auditLogService.createLog({
+        actor: actorName,
+        action: action,
+        target: target,
+        church: finalChurchName || '--',
+        actor_id: userId,
+        actor_type: user.type,
+        church_id: finalChurchId || null,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to create audit log: ${error.message}`);
+    }
   }
 
   async create(
@@ -124,6 +187,15 @@ export class AdsService {
       });
 
       this.logger.log(`Ad created: ${ad.id} by user ${userId}`);
+
+      // Create audit log
+      await this.createAuditLog(
+        userId,
+        'CREATED_AD',
+        `${ad.title} - ${ad.placement} (${this.formatLocationDisplay(ad.country, ad.city)})`,
+        null,
+        '--',
+      );
 
       return {
         success: true,
@@ -449,6 +521,35 @@ export class AdsService {
 
       this.logger.log(`Ad updated: ${id} by user ${userId}`);
 
+      // Create audit log
+      const changes = [];
+      if (updateAdDto.title && updateAdDto.title !== ad.title)
+        changes.push(`title: ${ad.title} → ${updateAdDto.title}`);
+      if (updateAdDto.status && updateAdDto.status !== ad.status)
+        changes.push(`status: ${ad.status} → ${updateAdDto.status}`);
+      if (updateAdDto.placement && updateAdDto.placement !== ad.placement)
+        changes.push(`placement: ${ad.placement} → ${updateAdDto.placement}`);
+      if (
+        updateAdDto.country !== undefined &&
+        updateAdDto.country !== ad.country
+      )
+        changes.push(
+          `country: ${ad.country || 'none'} → ${updateAdDto.country || 'none'}`,
+        );
+      if (updateAdDto.city !== undefined && updateAdDto.city !== ad.city)
+        changes.push(
+          `city: ${ad.city || 'none'} → ${updateAdDto.city || 'none'}`,
+        );
+
+      const changeText = changes.length > 0 ? ` (${changes.join(', ')})` : '';
+      await this.createAuditLog(
+        userId,
+        'UPDATED_AD',
+        `${ad.title} → ${updatedAd.title}${changeText}`,
+        null,
+        '--',
+      );
+
       return {
         success: true,
         statusCode: 200,
@@ -533,6 +634,15 @@ export class AdsService {
 
       this.logger.log(`Ad deleted: ${id} by user ${userId}`);
 
+      // Create audit log
+      await this.createAuditLog(
+        userId,
+        'DELETED_AD',
+        `${ad.title} (${ad.placement}) - ${this.formatLocationDisplay(ad.country, ad.city)}`,
+        null,
+        '--',
+      );
+
       return {
         success: true,
         statusCode: 200,
@@ -584,6 +694,17 @@ export class AdsService {
 
       this.logger.log(
         `Bulk status update: ${result.count} ads set to ${status}`,
+      );
+
+      // Create audit log
+      const affectedAds = ads.filter((ad) => accessibleIds.includes(ad.id));
+      const adTitles = affectedAds.map((ad) => ad.title).join(', ');
+      await this.createAuditLog(
+        userId,
+        'BULK_UPDATED_AD_STATUS',
+        `${result.count} ad(s) status changed to ${status}: ${adTitles.substring(0, 200)}`,
+        null,
+        '--',
       );
 
       return {
@@ -804,15 +925,6 @@ export class AdsService {
         };
       }
 
-      // const now = new Date();
-      // if (now < ad.start_date || now > ad.end_date) {
-      //   return {
-      //     success: false,
-      //     statusCode: 400,
-      //     message: 'Ad is not within active date range',
-      //   };
-      // }
-
       await this.prisma.$transaction([
         this.prisma.adView.create({
           data: {
@@ -873,15 +985,6 @@ export class AdsService {
         };
       }
 
-      // const now = new Date();
-      // if (now < ad.start_date || now > ad.end_date) {
-      //   return {
-      //     success: false,
-      //     statusCode: 400,
-      //     message: 'Ad is not within active date range',
-      //   };
-      // }
-
       await this.prisma.$transaction([
         this.prisma.adClick.create({
           data: {
@@ -934,8 +1037,6 @@ export class AdsService {
         where: {
           status: AdStatus.ACTIVE,
           placement: placement as any,
-          // start_date: { lte: now },
-          // end_date: { gte: now },
           deleted_at: null,
         },
         orderBy: [{ total_views: 'asc' }],

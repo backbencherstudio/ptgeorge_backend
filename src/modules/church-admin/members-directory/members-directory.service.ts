@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -14,10 +15,83 @@ import {
   ChurchMemberStatus,
   UserType,
 } from 'prisma/generated/enums';
+import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
 
 @Injectable()
 export class ChurchMembersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ChurchMembersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
+
+  // ─── Helper: Create audit log ─────────────────────────────────────────────────
+  private async createAuditLog(
+    userId: string | undefined,
+    action: string,
+    target: string,
+    churchId?: string | null,
+    churchName?: string | null,
+  ) {
+    try {
+      if (!userId) {
+        this.logger.log('No userId provided for audit log, skipping...');
+        return;
+      }
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { churchUser: true },
+      });
+
+      if (!user) {
+        this.logger.log(`User with id ${userId} not found for audit log`);
+        return;
+      }
+
+      let actorName: string = user.type;
+      if (user.first_name && user.last_name) {
+        actorName = `${user.first_name} ${user.last_name}`;
+      } else if (user.first_name) {
+        actorName = user.first_name;
+      }
+
+      let finalChurchName = churchName;
+      let finalChurchId = churchId;
+
+      if (churchId && !finalChurchName) {
+        const church = await this.prisma.church.findUnique({
+          where: { id: churchId },
+        });
+        if (church) {
+          finalChurchName = church.church_name;
+        }
+      }
+
+      if (
+        user.type === 'CHURCH_ADMIN' &&
+        !finalChurchId &&
+        user.churchUser &&
+        user.churchUser.length > 0
+      ) {
+        finalChurchId = user.churchUser[0].id;
+        finalChurchName = user.churchUser[0].church_name;
+      }
+
+      await this.auditLogService.createLog({
+        actor: actorName,
+        action: action,
+        target: target,
+        church: finalChurchName || '--',
+        actor_id: userId,
+        actor_type: user.type,
+        church_id: finalChurchId || null,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to create audit log: ${error.message}`);
+    }
+  }
 
   /**
    * Get all members of the church where the admin belongs
@@ -60,7 +134,7 @@ export class ChurchMembersService {
       deleted_at: null,
     };
 
-    // ✅ First, get TOTAL count of members (without pagination)
+    // First, get TOTAL count of members (without pagination)
     const totalCount = await this.prisma.churchMember.count({
       where: churchMemberWhere,
     });
@@ -93,7 +167,7 @@ export class ChurchMembersService {
       orderBy: { [sortBy || 'joined_at']: sortOrder || 'desc' },
     });
 
-    // ✅ Apply filters on the fetched members
+    // Apply filters on the fetched members
     let filteredMembers = churchMembers;
 
     if (search) {
@@ -142,7 +216,7 @@ export class ChurchMembersService {
       };
     });
 
-    // ✅ Use totalCount for pagination (not filteredMembers.length)
+    // Use totalCount for pagination (not filteredMembers.length)
     const total = totalCount;
 
     return {
@@ -271,7 +345,6 @@ export class ChurchMembersService {
 
   /**
    * Add a new member to the church (with church membership)
-   * SIMPLIFIED: Uses role_id directly from Role model
    */
   async addMember(adminId: string, dto: CreateMemberDto) {
     // Get admin with their church membership
@@ -384,7 +457,7 @@ export class ChurchMembersService {
             data: {
               church_id: targetChurchId,
               user_id: existingUser.id,
-              church_role: 'Member', // Default church role
+              church_role: 'Member',
               status: ChurchMemberStatus.ACTIVE,
               joined_at: new Date(),
               approved_by: adminId,
@@ -420,7 +493,7 @@ export class ChurchMembersService {
           data: {
             church_id: targetChurchId,
             user_id: user.id,
-            church_role: 'Member', // Default church role
+            church_role: 'Member',
             status: ChurchMemberStatus.ACTIVE,
             joined_at: new Date(),
             approved_by: adminId,
@@ -466,6 +539,17 @@ export class ChurchMembersService {
 
       return { user, password: createdPassword };
     });
+
+    // Create audit log
+    const memberName =
+      `${result.user.first_name} ${result.user.last_name}`.trim();
+    await this.createAuditLog(
+      adminId,
+      'ADDED_CHURCH_MEMBER',
+      `${memberName} added as ${role.title || role.name} to ${church.church_name}`,
+      targetChurchId,
+      church.church_name,
+    );
 
     return {
       success: true,
@@ -539,6 +623,36 @@ export class ChurchMembersService {
     const churchId =
       isSuperAdmin && dto.church_id ? dto.church_id : adminChurchId;
 
+    // Get church name for audit log
+    const church = churchId
+      ? await this.prisma.church.findUnique({
+          where: { id: churchId },
+          select: { church_name: true },
+        })
+      : null;
+
+    // Store old values for audit log
+    const oldValues = {
+      first_name: member.first_name,
+      last_name: member.last_name,
+      email: member.email,
+      phone_number: member.phone_number,
+      status: member.status,
+    };
+
+    // Get old role if updating role
+    let oldRole = null;
+    if (dto.role_id && churchId) {
+      const oldRoleAssignment = await this.prisma.roleUser.findFirst({
+        where: {
+          user_id: memberId,
+          churchId: churchId,
+        },
+        include: { role: true },
+      });
+      oldRole = oldRoleAssignment?.role;
+    }
+
     // Update member data
     const updateData: any = {};
     if (dto.first_name) updateData.first_name = dto.first_name;
@@ -556,8 +670,9 @@ export class ChurchMembersService {
     });
 
     // Update role if role_id provided
+    let newRole = null;
     if (dto.role_id && churchId) {
-      const newRole = await this.prisma.role.findFirst({
+      newRole = await this.prisma.role.findFirst({
         where: { id: dto.role_id, deleted_at: null },
       });
 
@@ -596,6 +711,43 @@ export class ChurchMembersService {
       });
     }
 
+    // Create audit log
+    const memberName = `${member.first_name} ${member.last_name}`.trim();
+    const changes = [];
+
+    if (dto.first_name && dto.first_name !== oldValues.first_name) {
+      changes.push(`first name: ${oldValues.first_name} → ${dto.first_name}`);
+    }
+    if (dto.last_name && dto.last_name !== oldValues.last_name) {
+      changes.push(`last name: ${oldValues.last_name} → ${dto.last_name}`);
+    }
+    if (dto.email && dto.email !== oldValues.email) {
+      changes.push(`email: ${oldValues.email} → ${dto.email}`);
+    }
+    if (dto.phone_number && dto.phone_number !== oldValues.phone_number) {
+      changes.push(`phone: ${oldValues.phone_number} → ${dto.phone_number}`);
+    }
+    if (dto.status && dto.status !== oldValues.status) {
+      changes.push(`status: ${oldValues.status} → ${dto.status}`);
+    }
+    if (dto.role_id && newRole && oldRole && oldRole.id !== newRole.id) {
+      changes.push(
+        `role: ${oldRole.title || oldRole.name} → ${newRole.title || newRole.name}`,
+      );
+    } else if (dto.role_id && newRole && !oldRole) {
+      changes.push(`role assigned: ${newRole.title || newRole.name}`);
+    }
+
+    const changeText = changes.length > 0 ? ` (${changes.join(', ')})` : '';
+
+    await this.createAuditLog(
+      adminId,
+      'UPDATED_CHURCH_MEMBER',
+      `${memberName} updated${changeText}`,
+      churchId,
+      church?.church_name,
+    );
+
     return {
       success: true,
       message: 'Member updated successfully',
@@ -631,6 +783,7 @@ export class ChurchMembersService {
       include: {
         church_memberships: {
           where: { status: ChurchMemberStatus.ACTIVE },
+          include: { church: true },
           take: 1,
         },
       },
@@ -641,6 +794,7 @@ export class ChurchMembersService {
     }
 
     const memberChurchId = member.church_memberships[0]?.church_id;
+    const church = member.church_memberships[0]?.church;
 
     // Permission check
     if (!isSuperAdmin && adminChurchId !== memberChurchId) {
@@ -688,6 +842,16 @@ export class ChurchMembersService {
       where: { id: churchId },
       data: { church_members: memberCount },
     });
+
+    // Create audit log
+    const memberName = `${member.first_name} ${member.last_name}`.trim();
+    await this.createAuditLog(
+      adminId,
+      'REMOVED_CHURCH_MEMBER',
+      `${memberName} removed from ${church?.church_name || 'church'}`,
+      churchId,
+      church?.church_name,
+    );
 
     return {
       success: true,

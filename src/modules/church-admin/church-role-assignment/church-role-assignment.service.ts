@@ -3,14 +3,88 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
-import { ChurchMemberStatus } from 'prisma/generated/enums';
+import { ChurchMemberStatus, UserStatus } from 'prisma/generated/enums';
+import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
 
 @Injectable()
 export class ChurchRoleAssignmentService {
-  constructor(private prisma: PrismaService) {} // Remove MailService for now
+  private readonly logger = new Logger(ChurchRoleAssignmentService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) {}
+
+  // ─── Helper: Create audit log ─────────────────────────────────────────────────
+  private async createAuditLog(
+    userId: string | undefined,
+    action: string,
+    target: string,
+    churchId?: string | null,
+    churchName?: string | null,
+  ) {
+    try {
+      if (!userId) {
+        this.logger.log('No userId provided for audit log, skipping...');
+        return;
+      }
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { churchUser: true },
+      });
+
+      if (!user) {
+        this.logger.log(`User with id ${userId} not found for audit log`);
+        return;
+      }
+
+      let actorName: string = user.type;
+      if (user.first_name && user.last_name) {
+        actorName = `${user.first_name} ${user.last_name}`;
+      } else if (user.first_name) {
+        actorName = user.first_name;
+      }
+
+      let finalChurchName = churchName;
+      let finalChurchId = churchId;
+
+      if (churchId && !finalChurchName) {
+        const church = await this.prisma.church.findUnique({
+          where: { id: churchId },
+        });
+        if (church) {
+          finalChurchName = church.church_name;
+        }
+      }
+
+      if (
+        user.type === 'CHURCH_ADMIN' &&
+        !finalChurchId &&
+        user.churchUser &&
+        user.churchUser.length > 0
+      ) {
+        finalChurchId = user.churchUser[0].id;
+        finalChurchName = user.churchUser[0].church_name;
+      }
+
+      await this.auditLogService.createLog({
+        actor: actorName,
+        action: action,
+        target: target,
+        church: finalChurchName || '--',
+        actor_id: userId,
+        actor_type: user.type,
+        church_id: finalChurchId || null,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to create audit log: ${error.message}`);
+    }
+  }
 
   // Get all roles that the current user is allowed to assign
   async getAssignableRoles(userId: string) {
@@ -78,6 +152,8 @@ export class ChurchRoleAssignmentService {
                     id: true,
                     first_name: true,
                     last_name: true,
+                    email: true,
+                    phone_number: true,
                   },
                 },
               },
@@ -106,6 +182,269 @@ export class ChurchRoleAssignmentService {
         assignedAt: roleAssignment?.created_at || null,
       };
     });
+  }
+
+  async getAllChurchUsers(
+    adminUserId: string,
+    filters: {
+      status?: UserStatus;
+      memberStatus?: ChurchMemberStatus;
+      role?: string;
+      search?: string;
+      fields?: string[];
+      page?: number;
+      limit?: number;
+    },
+  ): Promise<{
+    churchId: string;
+    churchName: string;
+    users: any[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const {
+      status,
+      memberStatus,
+      role,
+      search,
+      fields,
+      page = 1,
+      limit = 10,
+    } = filters;
+    const skip = (page - 1) * limit;
+
+    // 1. Get admin's church from active membership
+    const adminMembership = await this.prisma.churchMember.findFirst({
+      where: {
+        user_id: adminUserId,
+        status: ChurchMemberStatus.ACTIVE,
+        deleted_at: null,
+      },
+      include: {
+        church: {
+          select: {
+            id: true,
+            church_name: true,
+          },
+        },
+      },
+    });
+
+    if (!adminMembership) {
+      throw new ForbiddenException('You are not associated with any church');
+    }
+
+    const churchId = adminMembership.church_id;
+    const churchName = adminMembership.church.church_name;
+
+    // 2. Build the where clause for church members
+    const memberWhere: any = {
+      church_id: churchId,
+      deleted_at: null,
+    };
+
+    // Filter by church member status
+    if (memberStatus) {
+      memberWhere.status = memberStatus;
+    }
+
+    // Filter by user status (through user relation)
+    if (status) {
+      memberWhere.user = {
+        status: status,
+      };
+    }
+
+    // Filter by user search
+    if (search) {
+      memberWhere.user = {
+        ...memberWhere.user,
+        OR: [
+          { first_name: { contains: search, mode: 'insensitive' } },
+          { last_name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { phone_number: { contains: search } },
+        ],
+      };
+    }
+
+    // Filter by role
+    if (role) {
+      memberWhere.user = {
+        ...memberWhere.user,
+        roles_assigned_to_me: {
+          some: {
+            churchId: churchId,
+            role: {
+              name: role,
+            },
+          },
+        },
+      };
+    }
+
+    // 3. Get all church members with pagination
+    const [members, total] = await Promise.all([
+      this.prisma.churchMember.findMany({
+        where: memberWhere,
+        skip,
+        take: limit,
+        orderBy: [{ status: 'asc' }, { joined_at: 'desc' }],
+        include: {
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone_number: true,
+              status: true,
+              type: true,
+              email_verified_at: true,
+              created_at: true,
+              updated_at: true,
+              deleted_at: true,
+              church_name: true,
+              language: true,
+              company_name: true,
+              business_email: true,
+              service: true,
+              category: true,
+              profession: true,
+              website: true,
+              whatsapp_number: true,
+              available_time: true,
+              address_line1: true,
+              address_line2: true,
+              state: true,
+              country: true,
+              zip_code: true,
+              business_portfolio: true,
+              description: true,
+              avatar: true,
+              about_me: true,
+              bio: true,
+              roles_assigned_to_me: {
+                where: { churchId: churchId },
+                include: {
+                  role: {
+                    select: {
+                      id: true,
+                      name: true,
+                      title: true,
+                      color: true,
+                    },
+                  },
+                  assigned_by: {
+                    select: {
+                      id: true,
+                      first_name: true,
+                      last_name: true,
+                    },
+                  },
+                },
+                orderBy: { created_at: 'desc' },
+                take: 1,
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.churchMember.count({ where: memberWhere }),
+    ]);
+
+    // 4. Format the response with field selection
+    const users = members.map((member) => {
+      const user = member.user;
+      const roleAssignment = user.roles_assigned_to_me[0];
+
+      // Build the full user object
+      const fullUserData = {
+        // Basic info
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        full_name: `${user.first_name} ${user.last_name}`,
+        email: user.email,
+        phone_number: user.phone_number,
+        church_name: user.church_name,
+        language: user.language,
+
+        // Status info
+        status: user.status,
+        userType: user.type,
+        churchMemberStatus: member.status,
+        isEmailVerified: !!user.email_verified_at,
+        email_verified_at: user.email_verified_at,
+
+        // Dates
+        joinedAt: member.joined_at,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+        deleted_at: user.deleted_at,
+
+        // Church role
+        churchRole: member.church_role,
+
+        // Role assignment
+        currentRole: roleAssignment?.role || null,
+        assignedBy: roleAssignment?.assigned_by || null,
+        assignedAt: roleAssignment?.created_at || null,
+
+        // PRO User fields
+        company_name: user.company_name,
+        business_email: user.business_email,
+        service: user.service,
+        category: user.category,
+        profession: user.profession,
+        website: user.website,
+        whatsapp_number: user.whatsapp_number,
+        available_time: user.available_time,
+
+        // Address fields
+        address_line1: user.address_line1,
+        address_line2: user.address_line2,
+        state: user.state,
+        country: user.country,
+        zip_code: user.zip_code,
+
+        // Portfolio & Bio
+        business_portfolio: user.business_portfolio,
+        description: user.description,
+        avatar: user.avatar,
+        about_me: user.about_me,
+        bio: user.bio,
+      };
+
+      // If fields are specified, only return requested fields
+      if (fields && fields.length > 0) {
+        const filteredData: any = {};
+        fields.forEach((field) => {
+          if (field in fullUserData) {
+            filteredData[field] = fullUserData[field];
+          }
+        });
+        return filteredData;
+      }
+
+      return fullUserData;
+    });
+
+    return {
+      churchId,
+      churchName,
+      users,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   // Assign a role to a user (replaces any existing role)
@@ -156,12 +495,25 @@ export class ChurchRoleAssignmentService {
     // Get the role
     const role = await this.prisma.role.findUnique({
       where: { id: roleId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, title: true },
     });
 
     if (!role) {
       throw new NotFoundException('Role not found');
     }
+
+    // Get previous role for audit log
+    const previousAssignment = await this.prisma.roleUser.findFirst({
+      where: {
+        user_id: userId,
+        churchId: assignerChurchId,
+      },
+      include: {
+        role: {
+          select: { id: true, name: true, title: true },
+        },
+      },
+    });
 
     // 4. Remove any existing role assignment for this user in this church
     await this.prisma.roleUser.deleteMany({
@@ -207,17 +559,32 @@ export class ChurchRoleAssignmentService {
 
     // 7. Send email notification if requested (implement if needed)
     if (sendEmail) {
-      // TODO: Implement email sending
-      // await this.mailService.sendMail(...)
       console.log(
         `Email would be sent to ${targetUser.email} about role assignment`,
       );
     }
 
+    // Create audit log
+    const targetName =
+      `${targetUser.first_name} ${targetUser.last_name}`.trim();
+    const roleTitle = role.title || role.name;
+    const previousRoleTitle =
+      previousAssignment?.role?.title ||
+      previousAssignment?.role?.name ||
+      'none';
+
+    await this.createAuditLog(
+      assignerId,
+      'ASSIGNED_ROLE',
+      `${targetName} → ${roleTitle} (previous: ${previousRoleTitle})`,
+      assignerChurchId,
+      null,
+    );
+
     return {
+      status: 200,
       message: 'Role assigned successfully',
       data: {
-        // RoleUser doesn't have an id field (composite key), so we use role_id and user_id
         role_id: assignment.role_id,
         user_id: assignment.user_id,
         user: assignment.user,
@@ -257,15 +624,34 @@ export class ChurchRoleAssignmentService {
       throw new ForbiddenException('User does not belong to your church');
     }
 
+    // Get target user info
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { first_name: true, last_name: true },
+    });
+
     // Get the role
     const role = await this.prisma.role.findUnique({
       where: { id: newRoleId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, title: true },
     });
 
     if (!role) {
       throw new NotFoundException('Role not found');
     }
+
+    // Get previous role for audit log
+    const previousAssignment = await this.prisma.roleUser.findFirst({
+      where: {
+        user_id: userId,
+        churchId: assignerChurchId,
+      },
+      include: {
+        role: {
+          select: { id: true, name: true, title: true },
+        },
+      },
+    });
 
     // 4. Replace role
     await this.prisma.roleUser.deleteMany({
@@ -297,6 +683,24 @@ export class ChurchRoleAssignmentService {
         data: { church_role: 'Member' },
       });
     }
+
+    // Create audit log
+    const targetName = targetUser
+      ? `${targetUser.first_name} ${targetUser.last_name}`.trim()
+      : userId;
+    const roleTitle = role.title || role.name;
+    const previousRoleTitle =
+      previousAssignment?.role?.title ||
+      previousAssignment?.role?.name ||
+      'none';
+
+    await this.createAuditLog(
+      assignerId,
+      'UPDATED_USER_ROLE',
+      `${targetName} → ${roleTitle} (was: ${previousRoleTitle})`,
+      assignerChurchId,
+      null,
+    );
 
     return {
       message: 'Role updated successfully',
@@ -333,6 +737,24 @@ export class ChurchRoleAssignmentService {
       throw new ForbiddenException('User does not belong to your church');
     }
 
+    // Get target user info and previous role
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { first_name: true, last_name: true },
+    });
+
+    const previousAssignment = await this.prisma.roleUser.findFirst({
+      where: {
+        user_id: userId,
+        churchId: assignerChurchId,
+      },
+      include: {
+        role: {
+          select: { id: true, name: true, title: true },
+        },
+      },
+    });
+
     // Remove role assignment
     await this.prisma.roleUser.deleteMany({
       where: {
@@ -346,6 +768,23 @@ export class ChurchRoleAssignmentService {
       where: { id: targetMembership.id },
       data: { church_role: 'Regular Member' },
     });
+
+    // Create audit log
+    const targetName = targetUser
+      ? `${targetUser.first_name} ${targetUser.last_name}`.trim()
+      : userId;
+    const previousRoleTitle =
+      previousAssignment?.role?.title ||
+      previousAssignment?.role?.name ||
+      'unknown';
+
+    await this.createAuditLog(
+      assignerId,
+      'REVOKED_ROLE',
+      `${targetName} - removed role: ${previousRoleTitle}`,
+      assignerChurchId,
+      null,
+    );
 
     return { message: 'Role removed successfully' };
   }

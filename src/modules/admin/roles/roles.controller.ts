@@ -16,6 +16,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
@@ -26,12 +27,13 @@ import { Role } from 'src/common/guard/role/role.enum';
 import { CreateRoleDto } from './dto/create-roles.dto';
 import { UpdateRoleDto } from './dto/update-roles.dto';
 import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
+import { Fields } from 'src/common/decorators/fields.decorator';
 
 @ApiTags('Roles')
-@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
+@ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
 @Controller('roles')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.SUPER_ADMIN)
+@Roles(Role.SUPER_ADMIN, Role.CHURCH_ADMIN)
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
@@ -55,8 +57,19 @@ export class RolesController {
     description:
       'Returns all active (non-deleted) roles with their permission count, user count, and assigned permissions.',
   })
-  findAll() {
-    return this.rolesService.findAll();
+  @ApiQuery({
+    name: 'fields',
+    required: false,
+    description:
+      'Comma-separated list of fields to return (e.g., fields=id,name,title)',
+    example: 'id,name,title,description',
+    schema: {
+      type: 'string',
+      example: 'id,name,title,permission_count',
+    },
+  })
+  findAll(@Fields() fields?: string[]) {
+    return this.rolesService.findAll(fields);
   }
 
   // ─── GET /roles/:id ──────────────────────────────────────────────────────────

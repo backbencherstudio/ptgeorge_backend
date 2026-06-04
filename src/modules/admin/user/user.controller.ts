@@ -11,6 +11,7 @@ import {
   Req,
   HttpStatus,
   HttpCode,
+  BadRequestException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import {
@@ -111,10 +112,36 @@ export class UserController {
     @Query('limit') limit?: string,
   ) {
     const currentUserId = (req.user as any).userId;
+
+    // Validate status is valid UserStatus enum
+    let validStatus: UserStatus | undefined;
+    if (status) {
+      // Check if the provided status exists in UserStatus enum
+      if (Object.values(UserStatus).includes(status as UserStatus)) {
+        validStatus = status as UserStatus;
+      } else {
+        throw new BadRequestException(
+          `Invalid status value. Must be one of: ${Object.values(UserStatus).join(', ')}`,
+        );
+      }
+    }
+
+    // Validate type similarly
+    let validType: UserType | undefined;
+    if (type) {
+      if (Object.values(UserType).includes(type as UserType)) {
+        validType = type as UserType;
+      } else {
+        throw new BadRequestException(
+          `Invalid type value. Must be one of: ${Object.values(UserType).join(', ')}`,
+        );
+      }
+    }
+
     return this.userService.getAllUsers(currentUserId, {
       church_id,
-      type,
-      status,
+      type: validType,
+      status: validStatus,
       search,
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 10,

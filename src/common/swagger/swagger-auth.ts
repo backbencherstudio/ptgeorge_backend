@@ -87,7 +87,7 @@ export const swaggerUiOptions = {
             const token = data?.authorization?.access_token;
 
             if (!token) {
-              console.warn('[Swagger] No token found');
+              console.warn('[Swagger] No token found.');
               return response;
             }
 

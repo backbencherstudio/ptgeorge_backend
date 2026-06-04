@@ -36,8 +36,6 @@ export class UserService {
       church_id,
       language,
       email,
-      password,
-      confirm_password,
       type,
       agree_to_terms,
       company_name,
@@ -58,19 +56,17 @@ export class UserService {
       other_locations,
     } = createUserDto;
 
+    const DEFAULT_PASSWORD = 'Password@123';
+
+    const password = createUserDto.password || DEFAULT_PASSWORD;
+    const confirmPassword = createUserDto.confirm_password || password;
+
     // 1. Validate passwords match
-    if (password !== confirm_password) {
+    if (password !== confirmPassword) {
       throw new BadRequestException('Passwords do not match');
     }
 
-    // 2. Validate terms agreement
-    if (!agree_to_terms) {
-      throw new BadRequestException(
-        'You must agree to the terms and conditions',
-      );
-    }
-
-    // 3. Check if email already exists
+    // 2. Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -79,7 +75,7 @@ export class UserService {
       throw new ConflictException('Email already registered');
     }
 
-    // 4. Check if phone number already exists
+    // 3. Check if phone number already exists
     const existingPhone = await this.prisma.user.findFirst({
       where: { phone_number },
     });
@@ -88,7 +84,7 @@ export class UserService {
       throw new ConflictException('Phone number already registered');
     }
 
-    // 5. Validate church exists
+    // 4. Validate church exists
     const existingChurch = await this.prisma.church.findFirst({
       where: {
         id: church_id,
@@ -101,7 +97,7 @@ export class UserService {
       throw new BadRequestException('Invalid or inactive church selected');
     }
 
-    // 6. For PRO_USER, validate professional fields
+    // 5. For PRO_USER, validate professional fields
     if (type === UserType.PRO_USER) {
       const requiredFields = [
         { field: company_name, name: 'company_name' },
@@ -134,10 +130,10 @@ export class UserService {
       }
     }
 
-    // 7. Hash password
+    // 6. Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 8. Create user with transaction
+    // 7. Create user with transaction
     const result = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {

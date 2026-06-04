@@ -37,7 +37,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @ApiTags('Announcements')
-@ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
+@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.SUPER_ADMIN, Role.CHURCH_ADMIN)
 @Controller('announcements')

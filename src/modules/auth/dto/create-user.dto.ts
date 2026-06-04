@@ -69,25 +69,21 @@ export class CreateUserDto {
   @IsNotEmpty()
   email: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'Password@123',
-    description: 'User password (minimum 8 characters)',
-    required: true,
-    minLength: 8,
+    description: 'User password (optional for admin creation)',
   })
+  @IsOptional()
   @MinLength(8, { message: 'Password should be minimum 8 characters' })
-  @IsNotEmpty()
-  password: string;
+  password?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'Password@123',
-    description: 'Confirm password (must match password)',
-    required: true,
-    minLength: 8,
+    description: 'Confirm password (optional for admin creation)',
   })
+  @IsOptional()
   @MinLength(8)
-  @IsNotEmpty()
-  confirm_password: string;
+  confirm_password?: string;
 
   @ApiProperty({
     enum: UserType,
@@ -101,14 +97,13 @@ export class CreateUserDto {
   @IsNotEmpty()
   type: UserType;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: true,
     description:
       'Agree to terms and conditions, privacy policy, and community guidelines',
-    required: true,
   })
-  @IsNotEmpty()
-  agree_to_terms: boolean;
+  @IsOptional()
+  agree_to_terms?: boolean;
 
   // ==================== PROFESSIONAL SETUP (PRO_USER ONLY) ====================
   @ApiPropertyOptional({

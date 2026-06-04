@@ -762,3 +762,54 @@ enum PermissionAction {
   delete
   assign
 }
+
+// ==========================================
+// SIMPLE AUDIT LOGS SCHEMA
+// ==========================================
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  ASSIGN
+  REVOKE
+  APPROVE
+  REJECT
+  SUSPEND
+  ACTIVATE
+  EXPORT
+  LOGIN
+  LOGOUT
+  CHANGE_STATUS
+  MANAGE_PERMISSIONS
+  MANAGE_ROLES
+  MANAGE_CHURCH
+  MANAGE_USERS
+  DELETED_PERMISSION
+  ASSIGNED_ROLE
+  REVOKED_ROLE
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  
+  // Main fields matching your image
+  actor    String  // Who performed the action (e.g., "Super Admin", "John Doe")
+  action   String  // What action (e.g., "Deleted Permission", "Assigned Role")
+  target   String  // Target of action (e.g., "Manage Churches", "James Cole — Grace NY")
+  church   String? // Which church this belongs to (optional, "--" if none)
+  
+  // Additional metadata for filtering
+  actor_id   String?
+  actor_type String? // SUPER_ADMIN, CHURCH_ADMIN, etc.
+  church_id  String? // For church-specific filtering
+  
+  @@index([created_at(sort: Desc)])
+  @@index([actor])
+  @@index([action])
+  @@index([church_id])
+  @@index([church])
+  @@map("audit_logs")
+}

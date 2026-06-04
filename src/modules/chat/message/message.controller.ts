@@ -40,6 +40,7 @@ import appConfig from 'src/config/app.config';
 import { log } from 'node:console';
 import { PaginationDto } from 'src/common/pagination';
 import { OpenOrCreateConversationDto } from './dto/open-or-create-conversation.dto';
+import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 @ApiBearerAuth()
 @ApiTags('Message')
@@ -156,7 +157,7 @@ export class MessageController {
     @Req() req: any,
   ) {
     const user = req.user.userId;
-    return this.messageService.findAll(conversationId, user, paginationdto);
+    return this.messageService.findAll(conversationId, user, paginationDto);
   }
 
   @Delete('delete-message/:messageId')

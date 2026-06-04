@@ -28,6 +28,101 @@ export class MessageService {
     private readonly messageGateway: MessageGateway,
   ) {}
 
+
+  // ------------- utils start --------------------
+  
+  private formatConversationParticipant(user: {
+    id: string;
+    name: string | null;
+    avatar: string | null;
+  }) {
+    return {
+      userId: user.id,
+      name: user.name,
+      avater: user.avatar,
+      avatar_url: user.avatar
+        ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
+        : null,
+    };
+  }
+
+  private formatConversationMessage(message: {
+    id: string;
+    text: string | null;
+    createdAt: Date;
+    sender: {
+      id: string;
+      name: string | null;
+      avatar: string | null;
+    };
+  }) {
+    return {
+      id: message.id,
+      text: message.text,
+      createdAt: message.createdAt,
+      sender: {
+        id: message.sender.id,
+        name: message.sender.name,
+        avatar: message.sender.avatar
+          ? TanvirStorage.url(
+              `${appConfig().storageUrl.avatar}/${message.sender.avatar}`,
+            )
+          : null,
+      },
+    };
+  }
+
+  private async buildConversationResponse(conversationId: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+        messages: {
+          orderBy: {
+            createdAt: 'asc',
+          },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                name: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    return {
+      id: conversation.id,
+      participants: conversation.participants.map((participant) =>
+        this.formatConversationParticipant(participant.user),
+      ),
+      messages: conversation.messages.map((message) =>
+        this.formatConversationMessage(message),
+      ),
+    };
+  }
+
+  // ------------- utils end -------------------
+
+
+  // *Send message (with Prisma transaction)
   async create(
     createMessageDto: CreateMessageDto,
     sender: string,
@@ -127,70 +222,7 @@ export class MessageService {
     };
   }
 
-  private formatConversationParticipant(user: {
-    id: string;
-    name: string | null;
-    avatar: string | null;
-  }) {
-    return {
-      userId: user.id,
-      name: user.name,
-      avatar_url: user.avatar
-        ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
-        : null,
-    };
-  }
-
-  private formatConversationMessage(message: {
-    id: string;
-    text: string | null;
-    createdAt: Date;
-    sender: { id: string; name: string | null; avatar: string | null };
-  }) {
-    return {
-      id: message.id,
-      text: message.text,
-      createdAt: message.createdAt,
-      sender: {
-        id: message.sender.id,
-        name: message.sender.name,
-        avatar: message.sender.avatar
-          ? TanvirStorage.url(
-              `${appConfig().storageUrl.avatar}/${message.sender.avatar}`,
-            )
-          : null,
-      },
-    };
-  }
-
-  private async buildConversationResponse(conversationId: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
-      include: {
-        participants: {
-          include: { user: { select: { id: true, name: true, avatar: true } } },
-        },
-        messages: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            sender: { select: { id: true, name: true, avatar: true } },
-          },
-        },
-      },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    return {
-      id: conversation.id,
-      participants: conversation.participants.map((p) =>
-        this.formatConversationParticipant(p.user),
-      ),
-      messages: conversation.messages.map((m) =>
-        this.formatConversationMessage(m),
-      ),
-    };
-  }
-
+  // *Open or create conversation
   async openOrCreateConversation(
     dto: OpenOrCreateConversationDto,
     sender: string,
@@ -255,6 +287,7 @@ export class MessageService {
     };
   }
 
+  // *get all messages for a conversation
   async findAll(
     conversationId: string,
     userId: string,
@@ -358,6 +391,7 @@ export class MessageService {
     };
   }
 
+  // *delete a message
   async deleteMessage(userId: string, messageId: string) {
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
@@ -383,6 +417,8 @@ export class MessageService {
     return { message: 'Message deleted successfully', success: true };
   }
 
+
+  // *unread message count
   async getUnreadMessage(userId: string, conversationId: string) {
     const participant = await this.prisma.participant.findFirst({
       where: { conversationId, userId },
@@ -429,6 +465,7 @@ export class MessageService {
     };
   }
 
+  // *Mark messages as read
   async readMessages(userId: string, conversationId: string) {
     const participant = await this.prisma.participant.findFirst({
       where: { conversationId, userId },

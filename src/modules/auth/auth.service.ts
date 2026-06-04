@@ -323,7 +323,6 @@ export class AuthService {
   }
 
   // done
-  // In your auth.service.ts
   async unifiedLogin(loginDto: UnifiedLoginDto) {
     const { email, password, token } = loginDto;
 
@@ -471,7 +470,7 @@ export class AuthService {
   }
 
   // update user
-  async updateUser(
+  async  updateUser(
     userId: string,
     updateUserDto: UpdateUserDto,
     currentUserId: string,
@@ -677,6 +676,7 @@ export class AuthService {
     }
   }
 
+  // done
   async verifyResetOtp(verifyOtpDto: VerifyOtpDto) {
     try {
       const { email, otp } = verifyOtpDto;
@@ -958,6 +958,7 @@ export class AuthService {
       };
     }
   }
+ 
   // done
   async resendVerificationEmail(email: string) {
     try {
@@ -995,6 +996,7 @@ export class AuthService {
     }
   }
 
+  // done
   async changePassword({ user_id, oldPassword, newPassword }) {
     try {
       const user = await this.userRepository.getUserDetails(user_id);

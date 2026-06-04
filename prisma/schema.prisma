@@ -111,6 +111,12 @@ model User {
   // email verification
   email_verified_at DateTime?
 
+  // portfolio images 
+  portfolio_images String[] @db.Text
+
+  // Skills and expertise
+  skills     skills[] @relation("UserSkills")
+
   //----------------------------------------
   bio           String?   @db.Text
   domain        String?   @unique
@@ -172,6 +178,23 @@ model Ucode {
 
   @@map("ucodes")
 }
+  
+model skills {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  skill_name String
+
+  user_id String @unique
+  user    User   @relation("UserSkills", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("skills")
+}
+
+
+
 
 /**
  * ---------------------------------------------------------------------

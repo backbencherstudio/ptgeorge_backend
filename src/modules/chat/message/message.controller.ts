@@ -30,11 +30,16 @@ import {
   ApiBadRequestResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { FilesInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import {
+  FileFieldsInterceptor,
+  FileInterceptor,
+  FilesInterceptor,
+} from '@nestjs/platform-express';
+import { diskStorage, memoryStorage } from 'multer';
+import appConfig from 'src/config/app.config';
+import { log } from 'node:console';
 import { PaginationDto } from 'src/common/pagination';
 import { OpenOrCreateConversationDto } from './dto/open-or-create-conversation.dto';
-import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 @ApiBearerAuth()
 @ApiTags('Message')
@@ -46,6 +51,7 @@ export class MessageController {
     private readonly messageService: MessageService,
     private readonly messageGateway: MessageGateway,
   ) {}
+
 
   @Post('send-message')
   @ApiOperation({
@@ -78,7 +84,9 @@ export class MessageController {
   @UseInterceptors(
     FilesInterceptor('attachments', 10, {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: {
+        fileSize: 10 * 1024 * 1024,
+      },
     }),
   )
   async create(
@@ -86,10 +94,11 @@ export class MessageController {
     @Req() req: any,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    const userId = req.user.userId;
-    return this.messageService.create(createMessageDto, userId, files);
+    const user = req.user.userId;
+    return this.messageService.create(createMessageDto, user, files);
   }
 
+  //*open or create conversation
   @Post('open-or-create-conversation')
   @ApiOperation({
     summary: 'Open or create a conversation',
@@ -112,6 +121,7 @@ export class MessageController {
     return this.messageService.openOrCreateConversation(dto, userId);
   }
 
+  //*get all message for a conversation
   @Get('all-message/:conversationId')
   @ApiOperation({
     summary: 'Get paginated messages of a conversation',
@@ -145,8 +155,8 @@ export class MessageController {
     @Query() paginationDto: PaginationDto,
     @Req() req: any,
   ) {
-    const userId = req.user.userId;
-    return this.messageService.findAll(conversationId, userId, paginationDto);
+    const user = req.user.userId;
+    return this.messageService.findAll(conversationId, user, paginationdto);
   }
 
   @Delete('delete-message/:messageId')
@@ -155,19 +165,15 @@ export class MessageController {
     description:
       'Only the sender of the message can delete it. Attachments are also removed from storage.',
   })
-  @ApiParam({
-    name: 'messageId',
-    description: 'ID of the message to delete',
-    example: 'msg_123',
-  })
-  @ApiOkResponse({ description: 'Message deleted successfully' })
-  @ApiUnauthorizedResponse({ description: 'Not the sender' })
-  @ApiNotFoundResponse({ description: 'Message not found' })
-  async deleteMessage(@Param('messageId') messageId: string, @Req() req: any) {
-    const userId = req.user.userId;
-    return this.messageService.deleteMessage(userId, messageId);
+  async deleteMessage(
+    @Param('messageId') messageId: string, 
+    @Req() req: any
+  ) {
+    const user = req.user.userId;
+    return this.messageService.deleteMessage(user, messageId);
   }
 
+  // unread message count
   @Get('unread-message/:conversationId')
   @ApiOperation({
     summary: 'Get unread message count and details',
@@ -201,4 +207,8 @@ export class MessageController {
     const userId = req.user.userId;
     return this.messageService.readMessages(userId, conversationId);
   }
+
+
+
+
 }

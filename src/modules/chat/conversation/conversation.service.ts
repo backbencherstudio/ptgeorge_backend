@@ -4,10 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreateConversationDto } from './dto/create-conversation.dto';
-import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import appConfig from '../../../config/app.config';
-import { DateHelper } from '../../../common/helper/date.helper';
 import { MessageGateway } from '../message/message.gateway';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 
@@ -16,22 +14,42 @@ export class ConversationService {
   constructor(
     private prisma: PrismaService,
     private readonly messageGateway: MessageGateway,
-  ) { }
+  ) {}
 
-
-  
-
-
-  // create conversation
+  // Create or get existing conversation
   async create(createConversationDto: CreateConversationDto, sender: string) {
-
     const { participant_id } = createConversationDto;
 
     if (participant_id === sender) {
       throw new ConflictException('Cannot create conversation with yourself');
     }
 
-    // check if conversation already exists between the two users
+    // 1. Check that both users exist
+    const [senderUser, participantUser] = await this.prisma.$transaction([
+      this.prisma.user.findUnique({
+        where: { id: sender },
+        select: { id: true, name: true, avatar: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: participant_id },
+        select: { id: true, name: true, avatar: true },
+      }),
+    ]);
+
+    if (!senderUser) {
+      throw new NotFoundException('Authenticated user not found');
+    }
+    if (!participantUser) {
+      throw new NotFoundException(
+        'The participant you want to chat with does not exist',
+      );
+    }
+
+    // Optional: ensure sender is active (if needed)
+    // const senderFull = await this.prisma.user.findUnique({ where: { id: sender }, select: { status: true } });
+    // if (senderFull?.status !== 'ACTIVE') throw new ForbiddenException('Your account is not active');
+
+    // 2. Check if conversation already exists
     const existingConversation = await this.prisma.conversation.findFirst({
       where: {
         AND: [
@@ -43,11 +61,7 @@ export class ConversationService {
         participants: {
           include: {
             user: {
-              select: {
-                id: true,
-                name: true,
-                avatar: true,
-              },
+              select: { id: true, name: true, avatar: true },
             },
           },
         },
@@ -63,18 +77,17 @@ export class ConversationService {
           participants: existingConversation.participants.map((p) => ({
             userId: p.user.id,
             name: p.user.name,
-            avater: p.user.avatar,
             avatar_url: p.user.avatar
               ? TanvirStorage.url(
-                `${appConfig().storageUrl.avatar}/${p.user.avatar}`,
-              )
+                  `${appConfig().storageUrl.avatar}/${p.user.avatar}`,
+                )
               : null,
           })),
         },
       };
     }
 
-    // create new conversation
+    // 3. Create new conversation (now we are sure both users exist)
     const newConversation = await this.prisma.conversation.create({
       data: {
         participants: {
@@ -85,11 +98,7 @@ export class ConversationService {
         participants: {
           include: {
             user: {
-              select: {
-                id: true,
-                name: true,
-                avatar: true,
-              },
+              select: { id: true, name: true, avatar: true },
             },
           },
         },
@@ -101,11 +110,10 @@ export class ConversationService {
       participants: newConversation.participants.map((p) => ({
         userId: p.user.id,
         name: p.user.name,
-        avater: p.user.avatar,
         avatar_url: p.user.avatar
           ? TanvirStorage.url(
-            `${appConfig().storageUrl.avatar}/${p.user.avatar}`,
-          )
+              `${appConfig().storageUrl.avatar}/${p.user.avatar}`,
+            )
           : null,
       })),
     };
@@ -117,80 +125,61 @@ export class ConversationService {
     };
   }
 
-  //  conversation list of user
+  // Get all conversations for a user
   async findAll(userId: string) {
-
     const conversations = await this.prisma.conversation.findMany({
       where: {
-        participants: {
-          some: {
-            userId: userId,
-          },
-        },
+        participants: { some: { userId } },
       },
       include: {
         participants: {
           include: {
             user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                avatar: true,
-              },
+              select: { id: true, name: true, email: true, avatar: true },
             },
           },
         },
         messages: {
-          orderBy: {
-            createdAt: 'desc',
-          },
+          orderBy: { createdAt: 'desc' },
           take: 1,
-          select: {
-            text: true,
-            attachments: true,
-            createdAt: true,
-          },
+          select: { text: true, attachments: true, createdAt: true },
         },
       },
-      orderBy: {
-        updatedAt: 'desc',
-      },
+      orderBy: { updatedAt: 'desc' },
     });
 
     const formattedConversations = conversations.map((conv) => {
-
       const opponentParticipant = conv.participants.find(
         (p) => p.userId !== userId,
       );
-
-      const opponentData = opponentParticipant ? {
-        userId: opponentParticipant.user.id,
-        name: opponentParticipant.user.name,
-        avater: opponentParticipant.user.avatar,
-        avatar_url: opponentParticipant.user.avatar
-          ? TanvirStorage.url(
-            `${appConfig().storageUrl.avatar}/${opponentParticipant.user.avatar}`,
-          )
-          : null,
-      }
+      const opponentData = opponentParticipant
+        ? {
+            userId: opponentParticipant.user.id,
+            name: opponentParticipant.user.name,
+            avatar_url: opponentParticipant.user.avatar
+              ? TanvirStorage.url(
+                  `${appConfig().storageUrl.avatar}/${opponentParticipant.user.avatar}`,
+                )
+              : null,
+          }
         : null;
 
       return {
         conversation_id: conv.id,
         opponent: opponentData,
-        lastMessage: conv.messages[0] ? {
-          text: conv.messages[0].text,
-          createdAt: conv.messages[0].createdAt,
-          attachments: conv.messages[0].attachments,
-          attachment_urls: conv.messages[0].attachments
-            ? conv.messages[0].attachments.map((att) =>
-              TanvirStorage.url(
-                `${appConfig().storageUrl.attachment}/${att}`,
-              ),
-            )
-            : [],
-        }
+        lastMessage: conv.messages[0]
+          ? {
+              text: conv.messages[0].text,
+              createdAt: conv.messages[0].createdAt,
+              attachments: conv.messages[0].attachments,
+              attachment_urls: conv.messages[0].attachments
+                ? conv.messages[0].attachments.map((att) =>
+                    TanvirStorage.url(
+                      `${appConfig().storageUrl.attachment}/${att}`,
+                    ),
+                  )
+                : [],
+            }
           : null,
       };
     });
@@ -202,40 +191,26 @@ export class ConversationService {
     };
   }
 
-  // get conversation by id
+  // Get single conversation by ID
   async findOne(id: string, userId: string) {
     const conversation = await this.prisma.conversation.findFirst({
       where: {
-        id: id,
-        participants: {
-          some: {
-            userId: userId,
-          },
-        },
+        id,
+        participants: { some: { userId } },
       },
       include: {
         participants: {
           include: {
             user: {
-              select: {
-                id: true,
-                name: true,
-                avatar: true,
-              },
+              select: { id: true, name: true, avatar: true },
             },
           },
         },
         messages: {
-          orderBy: {
-            createdAt: 'asc',
-          },
+          orderBy: { createdAt: 'asc' },
           include: {
             sender: {
-              select: {
-                id: true,
-                name: true,
-                avatar: true,
-              },
+              select: { id: true, name: true, avatar: true },
             },
           },
         },
@@ -253,11 +228,10 @@ export class ConversationService {
       participants: conversation.participants.map((p) => ({
         userId: p.user.id,
         name: p.user.name,
-        avater: p.user.avatar,
         avatar_url: p.user.avatar
           ? TanvirStorage.url(
-            `${appConfig().storageUrl.avatar}/${p.user.avatar}`,
-          )
+              `${appConfig().storageUrl.avatar}/${p.user.avatar}`,
+            )
           : null,
       })),
       messages: conversation.messages.map((msg) => ({
@@ -269,8 +243,8 @@ export class ConversationService {
           name: msg.sender.name,
           avatar: msg.sender.avatar
             ? TanvirStorage.url(
-              `${appConfig().storageUrl.avatar}/${msg.sender.avatar}`,
-            )
+                `${appConfig().storageUrl.avatar}/${msg.sender.avatar}`,
+              )
             : null,
         },
       })),
@@ -283,16 +257,12 @@ export class ConversationService {
     };
   }
 
-  // delete conversation
+  // Delete conversation
   async remove(id: string, userId: string) {
     const conversation = await this.prisma.conversation.findFirst({
       where: {
-        id: id,
-        participants: {
-          some: {
-            userId: userId,
-          },
-        },
+        id,
+        participants: { some: { userId } },
       },
     });
 
@@ -302,11 +272,7 @@ export class ConversationService {
       );
     }
 
-    await this.prisma.conversation.delete({
-      where: {
-        id: id,
-      },
-    });
+    await this.prisma.conversation.delete({ where: { id } });
 
     return {
       message: 'Conversation deleted successfully',
@@ -314,14 +280,10 @@ export class ConversationService {
     };
   }
 
-
-  // user information
+  // Get all users except current user
   async findAllUserInfo(userId: string) {
-    
     const users = await this.prisma.user.findMany({
-      where: {
-        id: {not: userId},
-      },
+      where: { id: { not: userId } },
       select: {
         id: true,
         name: true,
@@ -329,9 +291,7 @@ export class ConversationService {
         avatar: true,
         type: true,
       },
-      orderBy: {
-        name: 'asc',
-      },
+      orderBy: { name: 'asc' },
     });
 
     const formattedUsers = users.map((user) => ({
@@ -339,9 +299,7 @@ export class ConversationService {
       name: user.name,
       email: user.email,
       avatar: user.avatar
-        ? TanvirStorage.url(
-            `${appConfig().storageUrl.avatar}/${user.avatar}`,
-          )
+        ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
         : null,
       type: user.type,
     }));
@@ -352,10 +310,4 @@ export class ConversationService {
       data: formattedUsers,
     };
   }
-
-
-
-
-
-
 }

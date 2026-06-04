@@ -7,7 +7,6 @@ import {
   Get,
   Query,
   UseInterceptors,
-  UploadedFile,
   UploadedFiles,
   Param,
   Delete,
@@ -15,7 +14,6 @@ import {
 import { MessageService } from './message.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { MessageGateway } from './message.gateway';
-import { Request } from 'express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -26,6 +24,10 @@ import {
   ApiParam,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
+  ApiNotFoundResponse,
+  ApiConflictResponse,
+  ApiBadRequestResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import {
@@ -42,6 +44,7 @@ import { OpenOrCreateConversationDto } from './dto/open-or-create-conversation.d
 @ApiBearerAuth()
 @ApiTags('Message')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 @Controller('chat/message')
 export class MessageController {
   constructor(
@@ -50,57 +53,34 @@ export class MessageController {
   ) {}
 
 
-  //*send message
   @Post('send-message')
-  @ApiOperation({ summary: 'Send a message with optional attachments' })
+  @ApiOperation({
+    summary: 'Send a message',
+    description:
+      'Send a text message with optional file attachments (max 10 files, 10MB each). The message is delivered in real‑time via WebSocket.',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
+    description: 'Message payload',
     schema: {
       type: 'object',
       required: ['conversationId'],
       properties: {
-        conversationId: {
-          type: 'string',
-          example: 'clx123abc456def789',
-        },
-        text: {
-          type: 'string',
-          example: 'Hello, how are you?',
-        },
+        conversationId: { type: 'string', example: 'clx123abc456def789' },
+        text: { type: 'string', example: 'Hello, how are you?' },
         attachments: {
           type: 'array',
-          items: {
-            type: 'string',
-            format: 'binary',
-          },
+          items: { type: 'string', format: 'binary' },
+          description: 'Up to 10 files (images, documents)',
         },
       },
     },
   })
-  @ApiCreatedResponse({
-    description: 'Message sent successfully',
-    schema: {
-      example: {
-        message: 'Message sent successfully',
-        success: true,
-        data: {
-          id: 'msg_123',
-          text: 'Hello, how are you?',
-          createdAt: '2026-05-24T00:00:00.000Z',
-          updatedAt: '2026-05-24T00:00:00.000Z',
-          status: 'SENT',
-          attchment: [],
-          attachments_url: [],
-          sender: {
-            id: 'user_123',
-            name: 'John Doe',
-            email: 'john@example.com',
-            avatar: null,
-          },
-        },
-      },
-    },
+  @ApiCreatedResponse({ description: 'Message sent successfully' })
+  @ApiUnauthorizedResponse({
+    description: 'Not a participant of the conversation',
   })
+  @ApiNotFoundResponse({ description: 'Conversation not found' })
   @UseInterceptors(
     FilesInterceptor('attachments', 10, {
       storage: memoryStorage(),
@@ -121,64 +101,69 @@ export class MessageController {
   //*open or create conversation
   @Post('open-or-create-conversation')
   @ApiOperation({
-    summary: 'Open an existing conversation or create a new one',
+    summary: 'Open or create a conversation',
+    description:
+      'If a conversation between the current user and the given participant already exists, returns it. Otherwise creates a new one.',
   })
+  @ApiBody({ type: OpenOrCreateConversationDto })
+  @ApiCreatedResponse({ description: 'Conversation created' })
+  @ApiOkResponse({ description: 'Existing conversation retrieved' })
+  @ApiBadRequestResponse({ description: 'participant_id missing' })
+  @ApiConflictResponse({
+    description: 'Cannot create conversation with yourself',
+  })
+  @ApiNotFoundResponse({ description: 'Participant user not found' })
   async openOrCreateConversation(
-    @Body() openOrCreateConversationDto: OpenOrCreateConversationDto,
+    @Body() dto: OpenOrCreateConversationDto,
     @Req() req: any,
   ) {
-    const user = req.user.userId;
-    return this.messageService.openOrCreateConversation(
-      openOrCreateConversationDto,
-      user,
-    );
+    const userId = req.user.userId;
+    return this.messageService.openOrCreateConversation(dto, userId);
   }
 
   //*get all message for a conversation
   @Get('all-message/:conversationId')
-  @ApiOperation({ summary: 'Get all messages for a conversation' })
-  @ApiParam({ name: 'conversationId', description: 'Conversation ID' })
-  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
-  @ApiQuery({ name: 'perPage', required: false, type: Number, example: 10 })
-  @ApiOkResponse({
-    description: 'Messages retrieved successfully',
-    schema: {
-      example: {
-        message: 'Messages retrieved successfully',
-        success: true,
-        data: {
-          data: [],
-          meta: {
-            total: 0,
-            page: 1,
-            perPage: 10,
-            totalPages: 0,
-          },
-        },
-      },
-    },
+  @ApiOperation({
+    summary: 'Get paginated messages of a conversation',
+    description:
+      'Returns messages sorted by creation time (oldest first). Only accessible to conversation participants.',
   })
+  @ApiParam({
+    name: 'conversationId',
+    description: 'ID of the conversation',
+    example: 'clx123abc456def789',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number (default 1)',
+  })
+  @ApiQuery({
+    name: 'perPage',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Items per page (default 10)',
+  })
+  @ApiOkResponse({ description: 'Messages retrieved successfully' })
+  @ApiUnauthorizedResponse({ description: 'Not a participant' })
+  @ApiNotFoundResponse({ description: 'Conversation not found' })
   async findAll(
     @Param('conversationId') conversationId: string,
-    @Query() paginationdto: PaginationDto,
+    @Query() paginationDto: PaginationDto,
     @Req() req: any,
   ) {
     const user = req.user.userId;
     return this.messageService.findAll(conversationId, user, paginationdto);
   }
 
-  // delete message
   @Delete('delete-message/:messageId')
-  @ApiOperation({ summary: 'Delete a message' })
-  @ApiParam({ name: 'messageId', description: 'Message ID' })
-  @ApiOkResponse({
-    description: 'Message deleted successfully',
-    schema: {
-      example: {
-        message: 'Message deleted successfully',
-        success: true,
-      },
-    },
+  @ApiOperation({
+    summary: 'Delete a message',
+    description:
+      'Only the sender of the message can delete it. Attachments are also removed from storage.',
   })
   async deleteMessage(
     @Param('messageId') messageId: string, 
@@ -190,45 +175,37 @@ export class MessageController {
 
   // unread message count
   @Get('unread-message/:conversationId')
-  @ApiOperation({ summary: 'Get unread message count for a conversation' })
-  @ApiParam({ name: 'conversationId', description: 'Conversation ID' })
-  @ApiOkResponse({
-    description: 'Unread message count retrieved successfully',
-    schema: {
-      example: {
-        message: 'Unread message count retrieved successfully',
-        success: true,
-        data: 3,
-      },
-    },
+  @ApiOperation({
+    summary: 'Get unread message count and details',
+    description:
+      'Returns the number of messages sent by others that are not yet marked as read, along with the first few unread messages.',
   })
+  @ApiParam({ name: 'conversationId', description: 'Conversation ID' })
+  @ApiOkResponse({ description: 'Unread count retrieved' })
+  @ApiUnauthorizedResponse({ description: 'Not a participant' })
   async getUnreadMessageCount(
     @Param('conversationId') conversationId: string,
     @Req() req: any,
   ) {
-    const user = req.user.userId;
-    return this.messageService.getUnreadMessage(user, conversationId);
+    const userId = req.user.userId;
+    return this.messageService.getUnreadMessage(userId, conversationId);
   }
 
-  // read messages
   @Get('read-message/:conversationId')
-  @ApiOperation({ summary: 'Mark conversation messages as read' })
-  @ApiParam({ name: 'conversationId', description: 'Conversation ID' })
-  @ApiOkResponse({
-    description: 'Messages marked as read',
-    schema: {
-      example: {
-        message: 'Messages marked as read',
-        success: true,
-      },
-    },
+  @ApiOperation({
+    summary: 'Mark all messages as read',
+    description:
+      'Updates the status of all unread messages in the conversation (sent by others) to READ and updates the participant’s `lastReadAt` timestamp.',
   })
+  @ApiParam({ name: 'conversationId', description: 'Conversation ID' })
+  @ApiOkResponse({ description: 'Messages marked as read' })
+  @ApiUnauthorizedResponse({ description: 'Not a participant' })
   async readMessages(
     @Param('conversationId') conversationId: string,
     @Req() req: any,
   ) {
-    const user = req.user.userId;
-    return this.messageService.readMessages(user, conversationId);
+    const userId = req.user.userId;
+    return this.messageService.readMessages(userId, conversationId);
   }
 
 

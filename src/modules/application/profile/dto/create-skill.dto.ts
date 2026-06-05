@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsArray, IsNotEmpty } from 'class-validator';
+import { IsString } from 'class-validator';
 
 export class CreateSkillDto {
  
@@ -8,6 +7,6 @@ export class CreateSkillDto {
     example: 'TypeScript',
     description: 'Name of the skill',
   })
-  @IsNotEmpty()
+  @IsString()
   skill_name: string;
 }

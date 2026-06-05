@@ -29,11 +29,30 @@ export class CommunityService {
     userId: string,
     image?: Express.Multer.File,
   ) {
-    const { church_id, title, content } = createPostDto;
+    const { title, content } = createPostDto;
 
     if (!title && !content) {
       throw new ForbiddenException('Post title or content is required.');
     }
+
+    // Find the user's active church membership
+    const member = await this.prisma.churchMember.findFirst({
+      where: {
+        user_id: userId,
+        status: 'ACTIVE', // Only active members can post
+      },
+      include: {
+        church: true, // Include church data if needed
+      },
+    });
+
+    if (!member) {
+      throw new ForbiddenException(
+        'You are not an active member of any church. Please join a church first.',
+      );
+    }
+
+    const church_id = member.church_id; // Get church_id from membership, not from frontend
 
     let fileName: string | null = null;
     if (image) {
@@ -44,17 +63,11 @@ export class CommunityService {
       );
     }
 
-    // verify user is an active member of this church
-    const member = await this.communityUtils.getActiveChurchMember(
-      userId,
-      church_id,
-    );
-
     const post = await this.prisma.churchPost.create({
       data: {
         content: content || '',
         image: fileName,
-        church_id,
+        church_id: church_id,
         church_member_id: member.id,
       },
     });

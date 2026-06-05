@@ -265,15 +265,12 @@ export class ProfileService {
         const fileName = imageUrl.split('/').pop();
         if (fileName) {
           try {
-            // Delete from storage
             await TanvirStorage.delete(
               `${appConfig().storageUrl.portfolio}/${fileName}`,
             );
 
-            portfolio = portfolio.filter((img) => {
-              const imgFileName = img.split('/').pop();
-              return imgFileName !== fileName;
-            });
+            // ✅ portfolio now stores plain filenames, compare directly
+            portfolio = portfolio.filter((img) => img !== fileName);
           } catch (error) {
             console.error('Failed to delete portfolio image:', error);
           }
@@ -284,7 +281,6 @@ export class ProfileService {
     // Upload new images
     if (files && files.length > 0) {
       for (const file of files) {
-        // Validate file type
         const allowedMimeTypes = [
           'image/jpeg',
           'image/png',
@@ -300,15 +296,14 @@ export class ProfileService {
         const fileExtension = file.originalname.split('.').pop();
         const fileName = `portfolio_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
 
-        // Upload to storage
+        // Upload to storage using full path
         await TanvirStorage.put(
           `${appConfig().storageUrl.portfolio}/${fileName}`,
           file.buffer,
         );
 
-        // Store the full URL or just filename (consistent with your avatar storage)
-        const imageUrl = `${appConfig().storageUrl.portfolio}/${fileName}`;
-        portfolio.push(imageUrl);
+        // ✅ Store ONLY the filename, not the full path
+        portfolio.push(fileName);
       }
     }
 
@@ -342,8 +337,11 @@ export class ProfileService {
     }
 
     const formattedImages =
-      existingUser.portfolio_images?.map((img) => {
-        TanvirStorage.url(`${appConfig().storageUrl.portfolio}/${img}}`);
+      existingUser.portfolio_images?.map((fileName) => {
+        // ✅ img is now just "filename.jpg", prepend path once
+        return TanvirStorage.url(
+          `${appConfig().storageUrl.portfolio}/${fileName}`,
+        );
       }) || [];
 
     return {

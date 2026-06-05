@@ -32,7 +32,11 @@ import { ChurchLoginDto } from './dto/login-church.dto';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto, UnifiedLoginDto } from './dto/create-user.dto';
 import { Role } from 'src/common/guard/role/role.enum';
-import { ForgotPasswordDto, ResetPasswordDto, VerifyOtpDto } from './dto/forgot-password.dto';
+import {
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  VerifyOtpDto,
+} from './dto/forgot-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -470,7 +474,7 @@ export class AuthService {
   }
 
   // update user
-  async  updateUser(
+  async updateUser(
     userId: string,
     updateUserDto: UpdateUserDto,
     currentUserId: string,
@@ -958,7 +962,7 @@ export class AuthService {
       };
     }
   }
- 
+
   // done
   async resendVerificationEmail(email: string) {
     try {
@@ -1173,7 +1177,7 @@ export class AuthService {
 
       await tx.church.update({
         where: { id: church.id },
-        data: { church_members: memberCount },
+        data: { church_members: memberCount, user_id: churchAdminUser.id },
       });
 
       return { church, churchAdminUser };
@@ -1192,6 +1196,7 @@ export class AuthService {
           domain: result.church.church_domain,
           city: result.church.church_city,
           status: result.church.status,
+          admin_user_id: result.church.user_id,
         },
         admin_user: {
           id: result.churchAdminUser.id,

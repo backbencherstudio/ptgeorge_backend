@@ -182,14 +182,15 @@ model Ucode {
 model skills {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
   deleted_at DateTime?
 
   skill_name String
 
-  user_id String @unique
-  user    User   @relation("UserSkills", fields: [user_id], references: [id], onDelete: Cascade)
+  user_id String
+  user    User @relation("UserSkills", fields: [user_id], references: [id], onDelete: Cascade)
 
+  @@unique([user_id, skill_name])
   @@map("skills")
 }
 

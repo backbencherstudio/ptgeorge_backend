@@ -756,7 +756,7 @@ async function main() {
 
           await tx.church.update({
             where: { id: newChurch.id },
-            data: { church_members: 1 },
+            data: { church_members: 1, user_id: newAdminUser.id },
           });
 
           return { church: newChurch, adminUser: newAdminUser, churchMember };

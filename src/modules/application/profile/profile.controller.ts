@@ -69,12 +69,6 @@ export class ProfileController {
     type: UpdateProfileDto,
     description: 'Update profile information and avatar',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Profile updated successfully',
-  })
-  @ApiResponse({ status: 400, description: 'Bad Request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async updateProfile(
     @Req() req,
     @Body() updateProfileDto: UpdateProfileDto,
@@ -96,10 +90,13 @@ export class ProfileController {
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  @ApiOperation({ summary: 'Upload portfolio images and/or delete existing ones' })
+  @ApiOperation({
+    summary: 'Upload portfolio images and/or delete existing ones',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description: 'Upload new portfolio images and/or delete existing ones by sending their URLs',
+    description:
+      'Upload new portfolio images and/or delete existing ones by sending their URLs',
     schema: {
       type: 'object',
       properties: {

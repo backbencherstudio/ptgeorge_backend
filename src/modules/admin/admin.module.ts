@@ -6,9 +6,13 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { ChurchesModule } from './churches/churches.module';
 import { AdsModule } from './ads-manager/ads-manager.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { SuperAdminOverviewModule } from './overview/overview.module';
+import { SuperAdminAnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
+    SuperAdminOverviewModule,
+    SuperAdminAnalyticsModule,
     UserModule,
     RolesModule,
     PermissionsModule,

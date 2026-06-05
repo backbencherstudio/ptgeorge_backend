@@ -23,6 +23,7 @@ export class LocalAdapter implements IStorage {
     const publicUrl = this._config.connection.publicUrl.replace(/\/$/, '');
     const cleanKey = key.replace(/^\//, '');
     return `${process.env.APP_URL}${publicUrl}/${cleanKey}`;
+    // → http://yourapp.com/storage/portfolio/filename.png  ✅
   }
 
   /**

@@ -3,12 +3,14 @@ import { ChurchAdminModule } from './church-role-assignment/church-admin.module'
 import { ChurchMembersModule } from './members-directory/members-directory.module';
 import { ProUserModule } from './member-request/memeber-request.module';
 import { ChurchAdminAnalyticsModule } from './overview/overview.module';
+import { HelpersModule } from './helpers/helpers.module';
 
 @Module({
   imports: [
     ChurchAdminAnalyticsModule,
     ChurchAdminModule,
     ChurchMembersModule,
+    HelpersModule,
     ProUserModule,
   ],
 })

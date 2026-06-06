@@ -87,6 +87,9 @@ export default () => ({
     blog: '/blog',
     avatar: '/avatar',
     portfolio: '/portfolio',
+    post: '/post',
+    comment: '/comment',
+    reply: '/reply',
     websiteInfo: '/website-info',
     // chat
     attachment: 'attachment/',

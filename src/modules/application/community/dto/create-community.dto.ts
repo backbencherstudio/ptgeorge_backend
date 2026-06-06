@@ -1,13 +1,19 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 
 export class CreateCommunityPostDto {
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({
+    example: 'Sunday Service',
+    description: 'Post title',
+  })
   @IsOptional()
   @IsString()
   title?: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({
+    example: 'Amazing worship service today!',
+    description: 'Post content',
+  })
   @IsOptional()
   @IsString()
   content?: string;

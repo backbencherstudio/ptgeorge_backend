@@ -1,9 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+// churches.service.ts
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { QueryChurchDto } from './dto/query-church.dto';
 import { UpdateChurchDto } from './dto/update-church.dto';
 import { UpdateChurchStatusDto } from './dto/update-church-status.dto';
 import { Prisma } from 'prisma/generated/client';
+import { UserType } from 'prisma/generated/client';
 
 @Injectable()
 export class ChurchesService {
@@ -29,7 +35,6 @@ export class ChurchesService {
       ];
     }
 
-    // Define all available fields with their types
     const allFields = {
       id: true,
       church_name: true,
@@ -37,6 +42,9 @@ export class ChurchesService {
       church_email: true,
       church_domain: true,
       church_adminname: true,
+      church_address: true,
+      church_description: true,
+      church_phone: true,
       church_members: true,
       status: true,
       auth_type: true,
@@ -44,24 +52,18 @@ export class ChurchesService {
       updated_at: true,
     } as const;
 
-    // Parse fields string to array if provided
     let select: Record<string, boolean>;
 
     if (fieldsString && fieldsString.trim()) {
-      // Split the comma-separated string and trim whitespace
       const requestedFields = fieldsString
         .split(',')
         .map((field) => field.trim());
-
-      // Build select object with requested fields
       select = {};
       requestedFields.forEach((field) => {
         if (field in allFields) {
           select[field] = true;
         }
       });
-
-      // If no valid fields were requested, fall back to all fields
       if (Object.keys(select).length === 0) {
         select = { ...allFields };
       }
@@ -91,10 +93,78 @@ export class ChurchesService {
     };
   }
 
-  async findOne(id: string) {
+  /**
+   * Resolve the actual church ID based on user role
+   * - For SUPER_ADMIN: uses the provided ID
+   * - For CHURCH_ADMIN: finds their associated church ID (ignores provided ID)
+   */
+  private async resolveChurchId(
+    providedId: string,
+    user: any,
+  ): Promise<string> {
+    // Fetch current user with role information
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: user.userId },
+      include: {
+        churchUser: true, // Get church associated with this user
+        roles_assigned_to_me: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!currentUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if user is SUPER_ADMIN
+    const isSuperAdmin = currentUser.type === UserType.SUPER_ADMIN;
+
+    // Check if user has CHURCH_ADMIN role
+    const hasChurchAdminRole = currentUser.roles_assigned_to_me.some(
+      (ra) =>
+        ra.role?.name === 'CHURCH_ADMIN' || ra.role?.title === 'CHURCH_ADMIN',
+    );
+
+    if (isSuperAdmin) {
+      // SUPER_ADMIN can update any church using the provided ID
+      return providedId;
+    }
+
+    if (hasChurchAdminRole) {
+      // CHURCH_ADMIN must update their own church
+      if (!currentUser.churchUser || currentUser.churchUser.length === 0) {
+        throw new ForbiddenException('You are not associated with any church');
+      }
+
+      // Get the church ID from the user's church association
+      const churchId = currentUser.churchUser[0]?.id;
+
+      if (!churchId) {
+        throw new ForbiddenException('No church found for this admin');
+      }
+
+      return churchId;
+    }
+
+    throw new ForbiddenException(
+      'You do not have permission to update churches',
+    );
+  }
+
+  async findOne(id: string, user?: any) {
+    let churchId = id;
+
+    // If user is provided, resolve the correct church ID based on role
+    if (user) {
+      churchId = await this.resolveChurchId(id, user);
+    }
+
     const church = await this.prisma.church.findFirst({
       where: {
-        id,
+        id: churchId,
         deleted_at: null,
       },
       select: {
@@ -104,11 +174,15 @@ export class ChurchesService {
         church_email: true,
         church_domain: true,
         church_adminname: true,
+        church_address: true,
+        church_description: true,
+        church_phone: true,
         church_members: true,
         status: true,
         auth_type: true,
         created_at: true,
         updated_at: true,
+        user_id: true,
       },
     });
 
@@ -116,22 +190,38 @@ export class ChurchesService {
     return church;
   }
 
-  async update(id: string, dto: UpdateChurchDto) {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateChurchDto, user: any) {
+    // Resolve the actual church ID based on user role
+    const churchId = await this.resolveChurchId(id, user);
+
+    // Verify church exists
+    await this.findOne(churchId, user);
+
+    // Clean up undefined values to avoid overwriting with undefined
+    const updateData: any = {};
+    Object.keys(dto).forEach((key) => {
+      if (dto[key as keyof UpdateChurchDto] !== undefined) {
+        updateData[key] = dto[key as keyof UpdateChurchDto];
+      }
+    });
 
     const updated = await this.prisma.church.update({
-      where: { id },
-      data: dto,
+      where: { id: churchId },
+      data: updateData,
       select: {
         id: true,
         church_name: true,
         church_city: true,
         church_email: true,
         church_domain: true,
-        church_adminname: true,
+        church_address: true,
+        church_description: true,
+        church_phone: true,
         church_members: true,
+        church_adminname: true,
         status: true,
         auth_type: true,
+        created_at: true,
         updated_at: true,
       },
     });
@@ -143,11 +233,15 @@ export class ChurchesService {
     };
   }
 
-  async updateStatus(id: string, dto: UpdateChurchStatusDto) {
-    await this.findOne(id);
+  async updateStatus(id: string, dto: UpdateChurchStatusDto, user: any) {
+    // Resolve the actual church ID based on user role
+    const churchId = await this.resolveChurchId(id, user);
+
+    // Verify church exists
+    await this.findOne(churchId, user);
 
     const updated = await this.prisma.church.update({
-      where: { id },
+      where: { id: churchId },
       data: { status: dto.status },
       select: {
         id: true,
@@ -164,11 +258,15 @@ export class ChurchesService {
     };
   }
 
-  async softDelete(id: string) {
-    await this.findOne(id);
+  async softDelete(id: string, user: any) {
+    // Resolve the actual church ID based on user role
+    const churchId = await this.resolveChurchId(id, user);
+
+    // Verify church exists
+    await this.findOne(churchId, user);
 
     const deleted = await this.prisma.church.update({
-      where: { id },
+      where: { id: churchId },
       data: { deleted_at: new Date() },
       select: {
         id: true,

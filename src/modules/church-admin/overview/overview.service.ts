@@ -26,8 +26,6 @@ export class ChurchAdminAnalyticsService {
       },
     });
 
-    console.log(churchAdmin)
-    
     if (!churchAdmin) {
       throw new NotFoundException(
         'No church found associated with this admin account.',

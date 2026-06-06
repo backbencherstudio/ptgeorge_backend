@@ -305,8 +305,6 @@ After registration:
   ) {
     const userId = req.user?.userId;
 
-    console.log(userId)
-
     if (!userId) {
       throw new UnauthorizedException('User not authenticated');
     }

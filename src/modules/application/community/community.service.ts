@@ -1,7 +1,9 @@
+// community.service.ts
 import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CommunityUtils } from './utils/community.utils';
@@ -12,6 +14,7 @@ import { StringHelper } from 'src/common/helper/string.helper';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { CreateCommunityPostDto } from './dto/create-community.dto';
+import { CursorPaginationDto } from './dto/cursor-pagination.dto';
 
 @Injectable()
 export class CommunityService {
@@ -21,87 +24,521 @@ export class CommunityService {
   ) {}
 
   /* -----------------------------------
+     Helper Methods
+  ----------------------------------- */
+
+  private async getUserChurchId(userId: string): Promise<string> {
+    const membership = await this.prisma.churchMember.findFirst({
+      where: {
+        user_id: userId,
+        status: 'ACTIVE',
+        deleted_at: null,
+      },
+      select: {
+        church_id: true,
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException(
+        'You are not an active member of any church. Please join a church first.',
+      );
+    }
+
+    return membership.church_id;
+  }
+
+  private async getUserChurchMember(userId: string, churchId: string) {
+    const member = await this.prisma.churchMember.findFirst({
+      where: {
+        user_id: userId,
+        church_id: churchId,
+        status: 'ACTIVE',
+        deleted_at: null,
+      },
+    });
+
+    if (!member) {
+      throw new ForbiddenException(
+        'You are not an active member of this church.',
+      );
+    }
+
+    return member;
+  }
+
+  private async getUserRoleInChurch(
+    userId: string,
+    churchId: string,
+  ): Promise<string | null> {
+    const roleAssignment = await this.prisma.roleUser.findFirst({
+      where: {
+        user_id: userId,
+        churchId: churchId,
+      },
+      include: {
+        role: {
+          select: {
+            title: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return (
+      roleAssignment?.role?.title ||
+      roleAssignment?.role?.name ||
+      'Church Member'
+    );
+  }
+
+  private getFullImageUrl(fileName: string, type: string): string | null {
+    if (!fileName) return null;
+    if (fileName.startsWith('http')) return fileName;
+    return TanvirStorage.url(`${appConfig().storageUrl[type]}/${fileName}`);
+  }
+
+  private getFullImageUrls(fileNames: string[], type: string): string[] {
+    if (!fileNames || fileNames.length === 0) return [];
+    return fileNames.map((fileName) => this.getFullImageUrl(fileName, type));
+  }
+
+  private async uploadPostImages(
+    files: Express.Multer.File[],
+  ): Promise<string[]> {
+    const uploadedFileNames: string[] = [];
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'image/webp',
+      'image/gif',
+    ];
+
+    for (const file of files) {
+      if (!allowedMimeTypes.includes(file.mimetype)) {
+        throw new BadRequestException(
+          `Invalid file type: ${file.originalname}. Only JPEG, PNG, JPG, WEBP, GIF are allowed`,
+        );
+      }
+
+      const fileExtension = file.originalname.split('.').pop();
+      const fileName = `post_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+
+      await TanvirStorage.put(
+        `${appConfig().storageUrl.post}/${fileName}`,
+        file.buffer,
+      );
+
+      uploadedFileNames.push(fileName);
+    }
+
+    return uploadedFileNames;
+  }
+
+  private async uploadCommentImage(
+    file: Express.Multer.File,
+  ): Promise<string | null> {
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'image/webp',
+      'image/gif',
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        `Invalid file type: ${file.originalname}. Only JPEG, PNG, JPG, WEBP, GIF are allowed`,
+      );
+    }
+
+    const fileExtension = file.originalname.split('.').pop();
+    const fileName = `comment_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+
+    const commentPath = appConfig().storageUrl.comment || '/comment';
+    await TanvirStorage.put(`${commentPath}/${fileName}`, file.buffer);
+
+    return fileName;
+  }
+
+  private async uploadReplyImage(
+    file: Express.Multer.File,
+  ): Promise<string | null> {
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'image/webp',
+      'image/gif',
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        `Invalid file type: ${file.originalname}. Only JPEG, PNG, JPG, WEBP, GIF are allowed`,
+      );
+    }
+
+    const fileExtension = file.originalname.split('.').pop();
+    const fileName = `reply_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+
+    const replyPath = appConfig().storageUrl.reply || '/reply';
+    await TanvirStorage.put(`${replyPath}/${fileName}`, file.buffer);
+
+    return fileName;
+  }
+
+  private async deleteImage(fileName: string, type: string): Promise<void> {
+    try {
+      if (fileName) {
+        const storagePath = `${appConfig().storageUrl[type]}/${fileName}`;
+        await TanvirStorage.delete(storagePath);
+      }
+    } catch (error) {
+      console.error(`Failed to delete ${type} image:`, error);
+    }
+  }
+
+  private async deleteMultipleImages(
+    fileNames: string[],
+    type: string,
+  ): Promise<void> {
+    for (const fileName of fileNames) {
+      await this.deleteImage(fileName, type);
+    }
+  }
+
+  /* -----------------------------------
      POST  (ChurchPost)
   ----------------------------------- */
 
   async createPost(
     createPostDto: CreateCommunityPostDto,
     userId: string,
-    image?: Express.Multer.File,
+    images?: Express.Multer.File[],
   ) {
-    const { title, content } = createPostDto;
+    const { content } = createPostDto;
 
-    if (!title && !content) {
-      throw new ForbiddenException('Post title or content is required.');
+    if (!content && (!images || images.length === 0)) {
+      throw new BadRequestException('Post content or image is required.');
     }
 
-    // Find the user's active church membership
-    const member = await this.prisma.churchMember.findFirst({
-      where: {
-        user_id: userId,
-        status: 'ACTIVE', // Only active members can post
-      },
-      include: {
-        church: true, // Include church data if needed
-      },
-    });
+    const churchId = await this.getUserChurchId(userId);
+    const member = await this.getUserChurchMember(userId, churchId);
+    const userRole = await this.getUserRoleInChurch(userId, churchId);
 
-    if (!member) {
-      throw new ForbiddenException(
-        'You are not an active member of any church. Please join a church first.',
-      );
-    }
-
-    const church_id = member.church_id; // Get church_id from membership, not from frontend
-
-    let fileName: string | null = null;
-    if (image) {
-      fileName = `${StringHelper.randomString(8)}${image.originalname}`;
-      await TanvirStorage.put(
-        `${appConfig().storageUrl.avatar}/${fileName}`,
-        image.buffer,
-      );
+    let imageFileNames: string[] = [];
+    if (images && images.length > 0) {
+      imageFileNames = await this.uploadPostImages(images);
     }
 
     const post = await this.prisma.churchPost.create({
       data: {
         content: content || '',
-        image: fileName,
-        church_id: church_id,
+        images: imageFileNames,
+        church_id: churchId,
         church_member_id: member.id,
       },
-    });
-
-    return {
-      message: 'Church post created successfully.',
-      data: post,
-    };
-  }
-
-  async findAllPosts(
-    userId: string,
-    paginationDto: PaginationDto,
-    churchId: string,
-  ) {
-    const { page, perPage } = paginationDto;
-    const skip = (page - 1) * perPage;
-
-    // verify membership
-    await this.communityUtils.getActiveChurchMember(userId, churchId);
-
-    const posts = await this.prisma.churchPost.findMany({
-      where: { church_id: churchId, deleted_at: null },
-      orderBy: { created_at: 'desc' },
       include: {
         church_member: {
           include: {
             user: {
               select: {
                 id: true,
-                name: true,
-                avatar: true,
                 first_name: true,
                 last_name: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const formattedPost = {
+      id: post.id,
+      content: post.content,
+      images: this.getFullImageUrls(post.images, 'post'),
+      created_at: post.created_at,
+      updated_at: post.updated_at,
+      author: {
+        id: post.church_member.user.id,
+        name: `${post.church_member.user.first_name} ${post.church_member.user.last_name}`,
+        avatar: this.getFullImageUrl(post.church_member.user.avatar, 'avatar'),
+        role: member.church_role || userRole,
+      },
+      stats: {
+        comments_count: 0,
+        reacts_count: 0,
+      },
+      user_reacted: null,
+    };
+
+    return {
+      success: true,
+      message: 'Church post created successfully.',
+      data: formattedPost,
+    };
+  }
+
+  async findAllPosts(userId: string, cursorPaginationDto: CursorPaginationDto) {
+    const { limit = 10, cursor, order = 'desc' } = cursorPaginationDto;
+    const churchId = await this.getUserChurchId(userId);
+
+    // Build the where clause
+    const where = {
+      church_id: churchId,
+      deleted_at: null,
+    };
+
+    // Build the orderBy - Fix: Use proper Prisma sort order
+    const orderBy = [
+      { created_at: order as 'asc' | 'desc' },
+      { id: order as 'asc' | 'desc' },
+    ];
+
+    let cursorCondition = {};
+    if (cursor) {
+      // Get the cursor post to use its created_at and id for pagination
+      const cursorPost = await this.prisma.churchPost.findUnique({
+        where: { id: cursor },
+        select: { created_at: true },
+      });
+
+      if (cursorPost) {
+        if (order === 'desc') {
+          cursorCondition = {
+            OR: [
+              { created_at: { lt: cursorPost.created_at } },
+              {
+                created_at: { equals: cursorPost.created_at },
+                id: { lt: cursor },
+              },
+            ],
+          };
+        } else {
+          cursorCondition = {
+            OR: [
+              { created_at: { gt: cursorPost.created_at } },
+              {
+                created_at: { equals: cursorPost.created_at },
+                id: { gt: cursor },
+              },
+            ],
+          };
+        }
+      }
+    }
+
+    // Get posts with cursor pagination
+    const posts = await this.prisma.churchPost.findMany({
+      where: {
+        ...where,
+        ...cursorCondition,
+      },
+      orderBy,
+      take: limit,
+      include: {
+        church_member: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+        comments: {
+          orderBy: { created_at: 'desc' },
+          take: 3,
+          include: {
+            church_member: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    avatar: true,
+                  },
+                },
+              },
+            },
+            replies: {
+              take: 2,
+              include: {
+                church_member: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        first_name: true,
+                        last_name: true,
+                        avatar: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        reacts: true,
+        _count: {
+          select: {
+            comments: true,
+            reacts: true,
+          },
+        },
+      },
+    });
+
+    // Get next cursor (last post's ID)
+    const nextCursor =
+      posts.length === limit ? posts[posts.length - 1].id : null;
+
+    if (posts.length === 0) {
+      return {
+        success: true,
+        message: 'Church posts retrieved successfully.',
+        data: [],
+        pagination: {
+          limit,
+          next_cursor: null,
+          has_more: false,
+        },
+      };
+    }
+
+    const postIds = posts.map((p) => p.id);
+    const reactCountsArray = await this.communityUtils.getReactCounts(postIds);
+
+    // Create a map of post_id to reaction counts
+    const reactCountsMap = new Map();
+    reactCountsArray.forEach((item: any) => {
+      const existing = reactCountsMap.get(item.post_id) || { LIKE: 0, LOVE: 0 };
+      if (item.react_type === 'LIKE') {
+        existing.LIKE = item._count._all;
+      } else if (item.react_type === 'LOVE') {
+        existing.LOVE = item._count._all;
+      }
+      reactCountsMap.set(item.post_id, existing);
+    });
+
+    // Get user's reactions for each post
+    const userReactions = await this.prisma.churchPostReact.findMany({
+      where: {
+        post_id: { in: postIds },
+        church_member: {
+          user_id: userId,
+          church_id: churchId,
+        },
+      },
+      select: {
+        post_id: true,
+        react_type: true,
+      },
+    });
+
+    const userReactionMap = new Map(
+      userReactions.map((r) => [r.post_id, r.react_type]),
+    );
+
+    const formattedPosts = posts.map((post) => {
+      // Since we included church_member, we can access it directly
+      const authorRole = post.church_member.church_role || 'Church Member';
+      const postReactions = reactCountsMap.get(post.id) || { LIKE: 0, LOVE: 0 };
+
+      return {
+        id: post.id,
+        content: post.content,
+        images: this.getFullImageUrls(post.images, 'post'),
+        created_at: post.created_at,
+        updated_at: post.updated_at,
+        author: {
+          id: post.church_member.user.id,
+          name: `${post.church_member.user.first_name} ${post.church_member.user.last_name}`,
+          avatar: this.getFullImageUrl(
+            post.church_member.user.avatar,
+            'avatar',
+          ),
+          role: authorRole,
+        },
+        stats: {
+          comments_count: post._count.comments,
+          reacts_count: post._count.reacts,
+          reaction_counts: postReactions,
+        },
+        user_reacted: userReactionMap.get(post.id) || null,
+        comments: post.comments.map((comment) => {
+          const commentAuthorRole =
+            comment.church_member.church_role || 'Church Member';
+          return {
+            id: comment.id,
+            content: comment.content,
+            image: this.getFullImageUrl(comment.image, 'comment'),
+            created_at: comment.created_at,
+            author: {
+              id: comment.church_member.user.id,
+              name: `${comment.church_member.user.first_name} ${comment.church_member.user.last_name}`,
+              avatar: this.getFullImageUrl(
+                comment.church_member.user.avatar,
+                'avatar',
+              ),
+              role: commentAuthorRole,
+            },
+            replies: comment.replies.map((reply) => {
+              const replyAuthorRole =
+                reply.church_member.church_role || 'Church Member';
+              return {
+                id: reply.id,
+                content: reply.content,
+                image: this.getFullImageUrl(reply.image, 'reply'),
+                created_at: reply.created_at,
+                author: {
+                  id: reply.church_member.user.id,
+                  name: `${reply.church_member.user.first_name} ${reply.church_member.user.last_name}`,
+                  avatar: this.getFullImageUrl(
+                    reply.church_member.user.avatar,
+                    'avatar',
+                  ),
+                  role: replyAuthorRole,
+                },
+              };
+            }),
+          };
+        }),
+      };
+    });
+
+    return {
+      success: true,
+      message: 'Church posts retrieved successfully.',
+      data: formattedPosts,
+      pagination: {
+        limit,
+        next_cursor: nextCursor,
+        has_more: nextCursor !== null,
+      },
+    };
+  }
+
+  async getPostById(postId: string, userId: string) {
+    const post = await this.prisma.churchPost.findUnique({
+      where: { id: postId, deleted_at: null },
+      include: {
+        church_member: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                avatar: true,
               },
             },
           },
@@ -114,10 +551,9 @@ export class CommunityService {
                 user: {
                   select: {
                     id: true,
-                    name: true,
-                    avatar: true,
                     first_name: true,
                     last_name: true,
+                    avatar: true,
                   },
                 },
               },
@@ -129,10 +565,9 @@ export class CommunityService {
                     user: {
                       select: {
                         id: true,
-                        name: true,
-                        avatar: true,
                         first_name: true,
                         last_name: true,
+                        avatar: true,
                       },
                     },
                   },
@@ -142,41 +577,134 @@ export class CommunityService {
           },
         },
         reacts: true,
-        _count: { select: { comments: true, reacts: true } },
+        _count: {
+          select: {
+            comments: true,
+            reacts: true,
+          },
+        },
       },
-      skip,
-      take: perPage,
     });
 
-    // get aggregated react counts (optional, but can be used for formatting)
-    const postIds = posts.map((p) => p.id);
-    const reactCounts = await this.communityUtils.getReactCounts(postIds);
-    const formattedPosts = this.communityUtils.formatPostsWithReactCounts(
-      posts,
-      reactCounts,
-    );
+    if (!post) {
+      throw new NotFoundException('Post not found.');
+    }
+
+    await this.getUserChurchMember(userId, post.church_id);
+
+    const reactCountsArray = await this.communityUtils.getReactCounts([
+      post.id,
+    ]);
+
+    // Parse reaction counts
+    let likeCount = 0;
+    let loveCount = 0;
+
+    reactCountsArray.forEach((item: any) => {
+      if (item.react_type === 'LIKE') {
+        likeCount = item._count._all;
+      } else if (item.react_type === 'LOVE') {
+        loveCount = item._count._all;
+      }
+    });
+
+    // Get user's reaction
+    const userReaction = await this.prisma.churchPostReact.findFirst({
+      where: {
+        post_id: postId,
+        church_member: {
+          user_id: userId,
+          church_id: post.church_id,
+        },
+      },
+      select: { react_type: true },
+    });
+
+    const authorRole = post.church_member.church_role || 'Church Member';
+
+    const formattedPost = {
+      id: post.id,
+      content: post.content,
+      images: this.getFullImageUrls(post.images, 'post'),
+      created_at: post.created_at,
+      updated_at: post.updated_at,
+      author: {
+        id: post.church_member.user.id,
+        name: `${post.church_member.user.first_name} ${post.church_member.user.last_name}`,
+        avatar: this.getFullImageUrl(post.church_member.user.avatar, 'avatar'),
+        role: authorRole,
+      },
+      stats: {
+        comments_count: post._count.comments,
+        reacts_count: post._count.reacts,
+        reaction_counts: {
+          LIKE: likeCount,
+          LOVE: loveCount,
+        },
+      },
+      user_reacted: userReaction?.react_type || null,
+      comments: post.comments.map((comment) => {
+        const commentAuthorRole =
+          comment.church_member.church_role || 'Church Member';
+        return {
+          id: comment.id,
+          content: comment.content,
+          image: this.getFullImageUrl(comment.image, 'comment'),
+          created_at: comment.created_at,
+          author: {
+            id: comment.church_member.user.id,
+            name: `${comment.church_member.user.first_name} ${comment.church_member.user.last_name}`,
+            avatar: this.getFullImageUrl(
+              comment.church_member.user.avatar,
+              'avatar',
+            ),
+            role: commentAuthorRole,
+          },
+          replies: comment.replies.map((reply) => {
+            const replyAuthorRole =
+              reply.church_member.church_role || 'Church Member';
+            return {
+              id: reply.id,
+              content: reply.content,
+              image: this.getFullImageUrl(reply.image, 'reply'),
+              created_at: reply.created_at,
+              author: {
+                id: reply.church_member.user.id,
+                name: `${reply.church_member.user.first_name} ${reply.church_member.user.last_name}`,
+                avatar: this.getFullImageUrl(
+                  reply.church_member.user.avatar,
+                  'avatar',
+                ),
+                role: replyAuthorRole,
+              },
+            };
+          }),
+        };
+      }),
+    };
 
     return {
-      message: 'Church posts retrieved successfully.',
-      data: formattedPosts,
-      meta: { page, perPage, total: posts.length },
+      success: true,
+      message: 'Post retrieved successfully.',
+      data: formattedPost,
     };
   }
 
   async removePost(postId: string, userId: string) {
     const post = await this.prisma.churchPost.findUnique({
       where: { id: postId },
-      select: { church_id: true, church_member_id: true, image: true },
+      select: {
+        church_id: true,
+        church_member_id: true,
+        images: true,
+      },
     });
 
     if (!post) {
       throw new NotFoundException('Church post not found.');
     }
 
-    const member = await this.communityUtils.getActiveChurchMember(
-      userId,
-      post.church_id,
-    );
+    const member = await this.getUserChurchMember(userId, post.church_id);
 
     if (post.church_member_id !== member.id) {
       throw new ForbiddenException(
@@ -184,17 +712,55 @@ export class CommunityService {
       );
     }
 
-    if (post.image) {
-      await TanvirStorage.delete(
-        `${appConfig().storageUrl.avatar}/${post.image}`,
-      );
+    const comments = await this.prisma.churchComment.findMany({
+      where: { post_id: postId },
+      select: {
+        id: true,
+        image: true,
+        replies: {
+          select: { image: true },
+        },
+      },
+    });
+
+    if (post.images && post.images.length > 0) {
+      await this.deleteMultipleImages(post.images, 'post');
     }
+
+    for (const comment of comments) {
+      if (comment.image) {
+        await this.deleteImage(comment.image, 'comment');
+      }
+      for (const reply of comment.replies) {
+        if (reply.image) {
+          await this.deleteImage(reply.image, 'reply');
+        }
+      }
+    }
+
+    for (const comment of comments) {
+      await this.prisma.churchCommentReply.deleteMany({
+        where: { comment_id: comment.id },
+      });
+    }
+
+    await this.prisma.churchComment.deleteMany({
+      where: { post_id: postId },
+    });
+
+    await this.prisma.churchPostReact.deleteMany({
+      where: { post_id: postId },
+    });
 
     const deleted = await this.prisma.churchPost.delete({
       where: { id: postId },
     });
 
-    return { message: 'Church post deleted successfully.', data: deleted };
+    return {
+      success: true,
+      message: 'Church post deleted successfully.',
+      data: deleted,
+    };
   }
 
   /* -----------------------------------
@@ -205,51 +771,87 @@ export class CommunityService {
     postId: string,
     dto: CreateCommentDto,
     userId: string,
-    image?: Express.Multer.File,
+    images?: Express.Multer.File[],
   ) {
     const { comment } = dto;
-    if (!comment) throw new ForbiddenException('Comment text is required.');
+    if (!comment && (!images || images.length === 0)) {
+      throw new BadRequestException('Comment text or image is required.');
+    }
 
-    const { post, member } = await this.communityUtils.getPostWithAccess(
-      postId,
-      userId,
-    );
+    const post = await this.prisma.churchPost.findUnique({
+      where: { id: postId, deleted_at: null },
+      select: { church_id: true },
+    });
 
-    let fileName: string | null = null;
-    if (image) {
-      fileName = `${StringHelper.randomString(8)}${image.originalname}`;
-      await TanvirStorage.put(
-        `${appConfig().storageUrl.avatar}/${fileName}`,
-        image.buffer,
-      );
+    if (!post) {
+      throw new NotFoundException('Post not found.');
+    }
+
+    const member = await this.getUserChurchMember(userId, post.church_id);
+    const userRole = await this.getUserRoleInChurch(userId, post.church_id);
+
+    let imageFileName: string | null = null;
+    if (images && images.length > 0) {
+      imageFileName = await this.uploadCommentImage(images[0]);
     }
 
     const newComment = await this.prisma.churchComment.create({
       data: {
-        content: comment,
-        image: fileName,
-        post_id: post.id,
+        content: comment || '',
+        image: imageFileName,
+        post_id: postId,
         church_member_id: member.id,
       },
       include: {
         church_member: {
-          include: { user: { select: { id: true, name: true, avatar: true } } },
+          include: {
+            user: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                avatar: true,
+              },
+            },
+          },
         },
       },
     });
 
-    return { message: 'Comment added successfully.', data: newComment };
+    const formattedComment = {
+      id: newComment.id,
+      content: newComment.content,
+      image: this.getFullImageUrl(newComment.image, 'comment'),
+      created_at: newComment.created_at,
+      author: {
+        id: newComment.church_member.user.id,
+        name: `${newComment.church_member.user.first_name} ${newComment.church_member.user.last_name}`,
+        avatar: this.getFullImageUrl(
+          newComment.church_member.user.avatar,
+          'avatar',
+        ),
+        role: member.church_role || userRole,
+      },
+    };
+
+    return {
+      success: true,
+      message: 'Comment added successfully.',
+      data: formattedComment,
+    };
   }
 
   async deleteComment(commentId: string, userId: string) {
     const comment = await this.prisma.churchComment.findUnique({
       where: { id: commentId },
-      include: { post: { select: { church_id: true } } },
+      include: {
+        post: { select: { church_id: true } },
+      },
     });
 
     if (!comment) throw new NotFoundException('Comment not found.');
 
-    const member = await this.communityUtils.getActiveChurchMember(
+    const member = await this.getUserChurchMember(
       userId,
       comment.post.church_id,
     );
@@ -260,16 +862,34 @@ export class CommunityService {
       );
     }
 
+    const replies = await this.prisma.churchCommentReply.findMany({
+      where: { comment_id: commentId },
+      select: { image: true },
+    });
+
     if (comment.image) {
-      await TanvirStorage.delete(
-        `${appConfig().storageUrl.avatar}/${comment.image}`,
-      );
+      await this.deleteImage(comment.image, 'comment');
     }
+
+    for (const reply of replies) {
+      if (reply.image) {
+        await this.deleteImage(reply.image, 'reply');
+      }
+    }
+
+    await this.prisma.churchCommentReply.deleteMany({
+      where: { comment_id: commentId },
+    });
 
     const deleted = await this.prisma.churchComment.delete({
       where: { id: commentId },
     });
-    return { message: 'Comment deleted successfully.', data: deleted };
+
+    return {
+      success: true,
+      message: 'Comment deleted successfully.',
+      data: deleted,
+    };
   }
 
   /* -----------------------------------
@@ -280,34 +900,39 @@ export class CommunityService {
     commentId: string,
     dto: CreateCommentDto,
     userId: string,
-    image?: Express.Multer.File,
+    images?: Express.Multer.File[],
   ) {
-    const comment = await this.prisma.churchComment.findUnique({
+    const { comment } = dto;
+    if (!comment && (!images || images.length === 0)) {
+      throw new BadRequestException('Reply text or image is required.');
+    }
+
+    const commentData = await this.prisma.churchComment.findUnique({
       where: { id: commentId },
       include: { post: { select: { church_id: true } } },
     });
 
-    if (!comment) throw new NotFoundException('Comment not found.');
+    if (!commentData) throw new NotFoundException('Comment not found.');
 
-    const member = await this.communityUtils.getActiveChurchMember(
+    const member = await this.getUserChurchMember(
       userId,
-      comment.post.church_id,
+      commentData.post.church_id,
+    );
+    const userRole = await this.getUserRoleInChurch(
+      userId,
+      commentData.post.church_id,
     );
 
-    let fileName: string | null = null;
-    if (image) {
-      fileName = `${StringHelper.randomString(8)}${image.originalname}`;
-      await TanvirStorage.put(
-        `${appConfig().storageUrl.avatar}/${fileName}`,
-        image.buffer,
-      );
+    let imageFileName: string | null = null;
+    if (images && images.length > 0) {
+      imageFileName = await this.uploadReplyImage(images[0]);
     }
 
     const reply = await this.prisma.churchCommentReply.create({
       data: {
-        content: dto.comment,
-        image: fileName,
-        comment_id: comment.id,
+        content: comment || '',
+        image: imageFileName,
+        comment_id: commentId,
         church_member_id: member.id,
       },
       include: {
@@ -316,10 +941,9 @@ export class CommunityService {
             user: {
               select: {
                 id: true,
-                name: true,
-                avatar: true,
                 first_name: true,
                 last_name: true,
+                avatar: true,
               },
             },
           },
@@ -327,7 +951,24 @@ export class CommunityService {
       },
     });
 
-    return { success: true, message: 'Reply added successfully.', data: reply };
+    const formattedReply = {
+      id: reply.id,
+      content: reply.content,
+      image: this.getFullImageUrl(reply.image, 'reply'),
+      created_at: reply.created_at,
+      author: {
+        id: reply.church_member.user.id,
+        name: `${reply.church_member.user.first_name} ${reply.church_member.user.last_name}`,
+        avatar: this.getFullImageUrl(reply.church_member.user.avatar, 'avatar'),
+        role: member.church_role || userRole,
+      },
+    };
+
+    return {
+      success: true,
+      message: 'Reply added successfully.',
+      data: formattedReply,
+    };
   }
 
   async deleteReplyToComment(replyId: string, userId: string) {
@@ -342,7 +983,7 @@ export class CommunityService {
 
     if (!reply) throw new NotFoundException('Reply not found.');
 
-    const member = await this.communityUtils.getActiveChurchMember(
+    const member = await this.getUserChurchMember(
       userId,
       reply.comment.post.church_id,
     );
@@ -354,15 +995,18 @@ export class CommunityService {
     }
 
     if (reply.image) {
-      await TanvirStorage.delete(
-        `${appConfig().storageUrl.avatar}/${reply.image}`,
-      );
+      await this.deleteImage(reply.image, 'reply');
     }
 
     const deleted = await this.prisma.churchCommentReply.delete({
       where: { id: replyId },
     });
-    return { message: 'Reply deleted successfully.', data: deleted };
+
+    return {
+      success: true,
+      message: 'Reply deleted successfully.',
+      data: deleted,
+    };
   }
 
   /* -----------------------------------
@@ -371,25 +1015,41 @@ export class CommunityService {
 
   async reactToPost(postId: string, dto: ReactPostDto, userId: string) {
     const { react_type } = dto;
-    const { post, member } = await this.communityUtils.getPostWithAccess(
-      postId,
-      userId,
-    );
+
+    const post = await this.prisma.churchPost.findUnique({
+      where: { id: postId, deleted_at: null },
+      select: { church_id: true },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found.');
+    }
+
+    const member = await this.getUserChurchMember(userId, post.church_id);
 
     const existing = await this.prisma.churchPostReact.findFirst({
-      where: { post_id: post.id, church_member_id: member.id },
+      where: { post_id: postId, church_member_id: member.id },
     });
 
     if (existing) {
       await this.prisma.churchPostReact.delete({ where: { id: existing.id } });
-      return { message: 'Reaction removed successfully.', reacted: false };
+      return {
+        success: true,
+        message: 'Reaction removed successfully.',
+        reacted: false,
+      };
     }
 
     const newReact = await this.prisma.churchPostReact.create({
-      data: { post_id: post.id, church_member_id: member.id, react_type },
+      data: {
+        post_id: postId,
+        church_member_id: member.id,
+        react_type,
+      },
     });
 
     return {
+      success: true,
       message: 'Reaction added successfully.',
       reacted: true,
       data: newReact,

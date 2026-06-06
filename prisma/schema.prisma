@@ -240,6 +240,10 @@ model Church {
   church_email     String @unique
   church_domain    String @unique
   church_adminname String @db.VarChar(255)
+  
+  church_address   String? @db.Text
+  church_description String? @db.Text
+  church_phone     String? @db.VarChar(50)
 
   google_id String? @unique
   apple_id  String? @unique
@@ -299,8 +303,8 @@ model ChurchPost {
   updated_at DateTime @default(now()) @updatedAt
   deleted_at DateTime?
 
-  image String?
-  content String? @db.Text
+  images    String[]  @db.Text // Array of multiple images
+  content   String?   @db.Text
 
   church_id String
   church    Church @relation("ChurchToPosts", fields: [church_id], references: [id], onDelete: Cascade)

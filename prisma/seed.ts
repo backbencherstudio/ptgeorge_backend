@@ -481,12 +481,12 @@ const churchPostsData = [
   {
     content:
       'Please keep our missionary team in your prayers as they travel to serve in South America.',
-    image: null,
+    images: null,
   },
   {
     content:
       'Welcome to all our new members! Orientation will be held this Saturday at 10 AM.',
-    image: 'posts/new-members.jpg',
+    images: 'posts/new-members.jpg',
   },
 ];
 
@@ -1199,7 +1199,7 @@ async function main() {
             data: {
               id: randomUUID(),
               content: postData.content,
-              image: postData.image,
+              images: postData.image ? [postData.image] : [],
               church_id: church.id,
               church_member_id: churchMember.id,
             },

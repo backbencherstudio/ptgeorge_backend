@@ -323,7 +323,7 @@ export class CommunityController {
 
   // -------------------- REPLIES --------------------
 
-  @Post('comment/:commentId/reply/images')
+  @Post('comment/:commentId/reply')
   @UseInterceptors(
     FilesInterceptor('images', 3, {
       storage: memoryStorage(),

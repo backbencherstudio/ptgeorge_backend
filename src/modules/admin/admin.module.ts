@@ -8,6 +8,7 @@ import { AdsModule } from './ads-manager/ads-manager.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { SuperAdminOverviewModule } from './overview/overview.module';
 import { SuperAdminAnalyticsModule } from './analytics/analytics.module';
+import { SystemAdminModule } from './system-admins/system-admins.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SuperAdminAnalyticsModule } from './analytics/analytics.module';
     PermissionsModule,
     ChurchesModule,
     AdsModule,
+    SystemAdminModule,
     AnnouncementsModule,
     NotificationModule,
   ],

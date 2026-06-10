@@ -45,8 +45,9 @@ async function bootstrap() {
     next();
   });
 
-  app.useStaticAssets(join(process.cwd(), 'public', 'storage'), {
-    prefix: '/storage',
+  app.useStaticAssets(join(__dirname, '..', '..', 'public'), {
+    index: false,
+    prefix: '/public',
   });
 
   app.useGlobalPipes(

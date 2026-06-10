@@ -841,6 +841,80 @@ export class CommunityService {
     };
   }
 
+  async getCommentsForPost(
+    postId: string, userId: string, paginationDto: PaginationDto) {
+    
+
+    const { page = 1, perPage = 10 } = paginationDto || {};
+
+    const post = await this.prisma.churchPost.findUnique({
+      where: { id: postId, deleted_at: null },
+      select: { church_id: true },
+    });
+
+    if (!post) throw new NotFoundException('Post not found.');
+
+    await this.getUserChurchMember(userId, post.church_id);
+
+    const skip = (page - 1) * perPage;
+
+    const [comments, total] = await Promise.all([
+      this.prisma.churchComment.findMany({
+        where: { post_id: postId },
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: perPage,
+        include: {
+          church_member: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  first_name: true,
+                  last_name: true,
+                  avatar: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.churchComment.count({ where: { post_id: postId } }),
+    ]);
+
+    const formatted = comments.map((comment) => {
+      const authorRole = comment.church_member.church_role || 'Church Member';
+      return {
+        id: comment.id,
+        content: comment.content,
+        image: this.getFullImageUrl(comment.image, 'comment'),
+        created_at: comment.created_at,
+        author: {
+          id: comment.church_member.user.id,
+          name: `${comment.church_member.user.first_name} ${comment.church_member.user.last_name}`,
+          avatar: this.getFullImageUrl(comment.church_member.user.avatar, 'avatar'),
+          role: authorRole,
+        },
+        // replies omitted by request
+      };
+    });
+
+    return {
+      success: true,
+      message: 'Comments retrieved successfully.',
+      data: formatted,
+      pagination: {
+        page,
+        perPage,
+        total,
+        has_more: skip + comments.length < total,
+      },
+    };
+
+  }
+
+
+
   async deleteComment(commentId: string, userId: string) {
     const comment = await this.prisma.churchComment.findUnique({
       where: { id: commentId },

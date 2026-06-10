@@ -51,7 +51,7 @@ export class CommunityController {
   constructor(private readonly communityService: CommunityService) {}
 
   // -------------------- POSTS --------------------
-
+  //  
   @Post('post')
   @UseInterceptors(
     FileFieldsInterceptor([{ name: 'images', maxCount: 10 }], {
@@ -205,6 +205,7 @@ export class CommunityController {
 
   // -------------------- COMMENTS --------------------
 
+  // Add comment 
   @Post('post/:postId/comment')
   @UseInterceptors(
     FileFieldsInterceptor([{ name: 'images', maxCount: 5 }], {
@@ -263,6 +264,35 @@ export class CommunityController {
       images,
     );
   }
+
+
+
+  @Get('post/:postId/comments')
+  @ApiOperation({
+    summary: 'Get all comments for a post',
+    description: 'Retrieve all comments and their replies for a specific post.',
+  })
+  @ApiParam({
+    name: 'postId',
+    description: 'Post ID',
+    example: 'cm8n7x5x50000123456789',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Comments retrieved successfully.',
+  })
+  async getCommentsByPostId(
+    @Req() req: Request,
+    @Param('postId') postId: string,
+    @Query() paginationDto: PaginationDto,
+  ) {
+    const userId = req.user.userId;
+    return this.communityService.getCommentsForPost(postId, userId, paginationDto);
+  }
+
+
+
+
 
   @Delete('comment/:commentId')
   @ApiOperation({

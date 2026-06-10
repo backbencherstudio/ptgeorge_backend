@@ -272,6 +272,8 @@ export class CommunityService {
         comments_count: 0,
         reacts_count: 0,
       },
+      myreact: false,
+      is_reacted: false,
       user_reacted: null,
     };
 
@@ -473,45 +475,9 @@ export class CommunityService {
           reacts_count: post._count.reacts,
           reaction_counts: postReactions,
         },
+        myreact: userReactionMap.has(post.id),
+        is_reacted: userReactionMap.has(post.id),
         user_reacted: userReactionMap.get(post.id) || null,
-        comments: post.comments.map((comment) => {
-          const commentAuthorRole =
-            comment.church_member.church_role || 'Church Member';
-          return {
-            id: comment.id,
-            content: comment.content,
-            image: this.getFullImageUrl(comment.image, 'comment'),
-            created_at: comment.created_at,
-            author: {
-              id: comment.church_member.user.id,
-              name: `${comment.church_member.user.first_name} ${comment.church_member.user.last_name}`,
-              avatar: this.getFullImageUrl(
-                comment.church_member.user.avatar,
-                'avatar',
-              ),
-              role: commentAuthorRole,
-            },
-            replies: comment.replies.map((reply) => {
-              const replyAuthorRole =
-                reply.church_member.church_role || 'Church Member';
-              return {
-                id: reply.id,
-                content: reply.content,
-                image: this.getFullImageUrl(reply.image, 'reply'),
-                created_at: reply.created_at,
-                author: {
-                  id: reply.church_member.user.id,
-                  name: `${reply.church_member.user.first_name} ${reply.church_member.user.last_name}`,
-                  avatar: this.getFullImageUrl(
-                    reply.church_member.user.avatar,
-                    'avatar',
-                  ),
-                  role: replyAuthorRole,
-                },
-              };
-            }),
-          };
-        }),
       };
     });
 
@@ -642,6 +608,8 @@ export class CommunityService {
           LOVE: loveCount,
         },
       },
+      myreact: !!userReaction?.react_type,
+      is_reacted: !!userReaction?.react_type,
       user_reacted: userReaction?.react_type || null,
       comments: post.comments.map((comment) => {
         const commentAuthorRole =

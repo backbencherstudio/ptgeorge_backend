@@ -266,7 +266,6 @@ export class CommunityController {
   }
 
 
-
   @Get('post/:postId/comments')
   @ApiOperation({
     summary: 'Get all comments for a post',
@@ -289,9 +288,6 @@ export class CommunityController {
     const userId = req.user.userId;
     return this.communityService.getCommentsForPost(postId, userId, paginationDto);
   }
-
-
-
 
 
   @Delete('comment/:commentId')

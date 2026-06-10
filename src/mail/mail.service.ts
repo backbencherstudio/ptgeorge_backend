@@ -78,4 +78,54 @@ export class MailService {
       console.log(error);
     }
   }
+
+  async sendContactNotification(contactData: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+    subject: string;
+    message: string;
+  }) {
+    try {
+      const { firstName, lastName, phone, email, subject, message } =
+        contactData;
+      const adminEmail = appConfig().mail.user;
+      const from = `${firstName} ${lastName} <${email}>`;
+      const appName = process.env.APP_NAME || appConfig().app.name;
+
+      // Queue the admin notification email
+      await this.queue.add('sendContactNotification', {
+        to: adminEmail,
+        from: from,
+        subject: `New Contact Form Submission: ${subject}`,
+        template: './contact-notification',
+        context: {
+          firstName,
+          lastName,
+          phone,
+          email,
+          subject,
+          message,
+          submittedAt: new Date(),
+          appName,
+        },
+      });
+
+      // Queue auto-reply to user
+      await this.queue.add('sendAutoReply', {
+        to: email,
+        subject: `Thank you for contacting ${appName}`,
+        template: './auto-reply',
+        context: {
+          firstName,
+          lastName,
+          appName,
+        },
+      });
+    } catch (error) {
+      console.log('Error sending contact notification:', error);
+      throw error;
+    }
+  }
 }

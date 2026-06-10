@@ -272,6 +272,8 @@ export class CommunityService {
         comments_count: 0,
         reacts_count: 0,
       },
+      myreact: false,
+      is_reacted: false,
       user_reacted: null,
     };
 
@@ -473,6 +475,8 @@ export class CommunityService {
           reacts_count: post._count.reacts,
           reaction_counts: postReactions,
         },
+        myreact: userReactionMap.has(post.id),
+        is_reacted: userReactionMap.has(post.id),
         user_reacted: userReactionMap.get(post.id) || null,
         comments: post.comments.map((comment) => {
           const commentAuthorRole =
@@ -642,6 +646,8 @@ export class CommunityService {
           LOVE: loveCount,
         },
       },
+      myreact: !!userReaction?.react_type,
+      is_reacted: !!userReaction?.react_type,
       user_reacted: userReaction?.react_type || null,
       comments: post.comments.map((comment) => {
         const commentAuthorRole =

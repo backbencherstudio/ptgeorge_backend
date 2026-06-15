@@ -51,6 +51,7 @@ export class CommunityController {
   constructor(private readonly communityService: CommunityService) {}
 
   // -------------------- POSTS --------------------
+ 
   //  
   @Post('post')
   @UseInterceptors(

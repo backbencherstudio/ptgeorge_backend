@@ -284,7 +284,10 @@ export class CommunityService {
     };
   }
 
-  async findAllPosts(userId: string, cursorPaginationDto: CursorPaginationDto) {
+  async findAllPosts(
+    userId: string, 
+    cursorPaginationDto: CursorPaginationDto
+  ) {
     const { limit = 10, cursor, order = 'desc' } = cursorPaginationDto;
     const churchId = await this.getUserChurchId(userId);
 
@@ -493,7 +496,10 @@ export class CommunityService {
     };
   }
 
-  async getPostById(postId: string, userId: string) {
+  async getPostById(
+    postId: string, 
+    userId: string
+  ) {
     const post = await this.prisma.churchPost.findUnique({
       where: { id: postId, deleted_at: null },
       include: {
@@ -658,7 +664,10 @@ export class CommunityService {
     };
   }
 
-  async removePost(postId: string, userId: string) {
+  async removePost(
+    postId: string, 
+    userId: string
+  ) {
     const post = await this.prisma.churchPost.findUnique({
       where: { id: postId },
       select: {
@@ -881,8 +890,6 @@ export class CommunityService {
 
   }
 
-
-
   async deleteComment(commentId: string, userId: string) {
     const comment = await this.prisma.churchComment.findUnique({
       where: { id: commentId },
@@ -1013,7 +1020,9 @@ export class CommunityService {
     };
   }
 
-  async deleteReplyToComment(replyId: string, userId: string) {
+  async deleteReplyToComment(
+    replyId: string, 
+    userId: string) {
     const reply = await this.prisma.churchCommentReply.findUnique({
       where: { id: replyId },
       include: {
@@ -1055,7 +1064,11 @@ export class CommunityService {
      REACT (ChurchPostReact)
   ----------------------------------- */
 
-  async reactToPost(postId: string, dto: ReactPostDto, userId: string) {
+  async reactToPost(
+    postId: string, 
+    dto: ReactPostDto, 
+    userId: string
+  ) {
     const { react_type } = dto;
 
     const post = await this.prisma.churchPost.findUnique({
@@ -1097,4 +1110,7 @@ export class CommunityService {
       data: newReact,
     };
   }
+
+
+
 }

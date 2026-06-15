@@ -1,26 +1,27 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UserRepository } from '../../../common/repository/user/user.repository';
-import { NotificationSettingType } from 'prisma/generated/client';
+import { NotificationSettingType } from 'prisma/generated/enums';
 
 @Injectable()
 export class NotificationService {
-  
   constructor(
     private prisma: PrismaService,
     private userRepository: UserRepository,
   ) {}
 
   /*--------------------------------(utils part start)---------------------------------- */
-  
+
   // All notification types
   private static readonly ALL_NOTIFICATION_TYPES: NotificationSettingType[] = [
     NotificationSettingType.NEW_REQUEST_ALERT,
     NotificationSettingType.APPROVAL_CONFIRMATION,
     NotificationSettingType.ROLE_ASSIGNMENT_ALERT,
+    NotificationSettingType.NEW_REVIEW_ALERT,
+    NotificationSettingType.NEW_FOLLOW_ALERT,
   ];
 
-  // Metadata for each notification type
+  // Metadata for each notification type - FIXED: Added missing entries
   private static readonly NOTIFICATION_META: Record<
     NotificationSettingType,
     { label: string; description: string }
@@ -37,6 +38,14 @@ export class NotificationService {
       label: 'Role Assignment Alert',
       description: 'When roles are assigned',
     },
+    [NotificationSettingType.NEW_REVIEW_ALERT]: {
+      label: 'New Review Alert',
+      description: 'When someone reviews your profile',
+    },
+    [NotificationSettingType.NEW_FOLLOW_ALERT]: {
+      label: 'New Follow Alert',
+      description: 'When someone follows you',
+    },
   };
 
   /*--------------------------------(utils part end)---------------------------------- */
@@ -47,10 +56,12 @@ export class NotificationService {
       throw new BadRequestException('User id not found');
     }
 
-    const existingSettings = await this.prisma.userNotificationSetting.findMany({
-      where: { user_id: userId },
-      select: { type: true, is_enabled: true },
-    });
+    const existingSettings = await this.prisma.userNotificationSetting.findMany(
+      {
+        where: { user_id: userId },
+        select: { type: true, is_enabled: true },
+      },
+    );
 
     const settingsMap = new Map<NotificationSettingType, boolean>(
       existingSettings.map((s) => [s.type, s.is_enabled]),
@@ -60,7 +71,8 @@ export class NotificationService {
     const settings = NotificationService.ALL_NOTIFICATION_TYPES.map((type) => ({
       type,
       label: NotificationService.NOTIFICATION_META[type]?.label ?? type,
-      description: NotificationService.NOTIFICATION_META[type]?.description ?? '',
+      description:
+        NotificationService.NOTIFICATION_META[type]?.description ?? '',
       isEnabled: settingsMap.has(type) ? settingsMap.get(type)! : false,
     }));
 
@@ -75,7 +87,6 @@ export class NotificationService {
     userId: string,
     updateDto: { type: NotificationSettingType; isEnabled: boolean },
   ) {
-   
     if (!userId) {
       throw new BadRequestException('User id not found');
     }
@@ -104,12 +115,14 @@ export class NotificationService {
       message: `${updateDto.type} ${updateDto.isEnabled ? 'enabled' : 'disabled'} successfully`,
       setting: {
         type: updated.type,
-        label: NotificationService.NOTIFICATION_META[updated.type]?.label ?? updated.type,
-        description: NotificationService.NOTIFICATION_META[updated.type]?.description ?? '',
+        label:
+          NotificationService.NOTIFICATION_META[updated.type]?.label ??
+          updated.type,
+        description:
+          NotificationService.NOTIFICATION_META[updated.type]?.description ??
+          '',
         isEnabled: updated.is_enabled,
       },
     };
   }
-  
-
 }

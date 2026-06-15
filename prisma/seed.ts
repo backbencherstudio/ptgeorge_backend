@@ -5,6 +5,9 @@ import {
   AdStatus,
   AdPlacement,
   ReactType,
+  UserType,
+  FollowStatus,
+  ReviewStatus,
 } from '../prisma/generated/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
@@ -21,26 +24,13 @@ async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, saltRounds);
 }
 
-// Define roles data - Simplified (matching Role enum)
+// Define roles data - ONLY assignable roles (NOT UserType enums)
 const rolesData = [
   {
-    title: 'Super Admin',
-    name: Role.SUPER_ADMIN,
-    description: 'System super administrator with full access',
-    color: '#FF0000',
-  },
-  {
     title: 'Admin',
-    name: Role.ADMIN,
-    description: 'System administrator',
+    name: Role.ADMIN, // Add this
+    description: 'System administrator with full platform access',
     color: '#FF6B6B',
-  },
-  {
-    title: 'Church Admin',
-    name: Role.CHURCH_ADMIN,
-    description:
-      'Church administrator with full control over church management',
-    color: '#FF8C00',
   },
   {
     title: 'Church Leader',
@@ -77,18 +67,6 @@ const rolesData = [
     name: Role.CHURCH_MEMBER,
     description: 'Regular church member',
     color: '#98D8C8',
-  },
-  {
-    title: 'Pro User',
-    name: Role.PRO_USER,
-    description: 'Verified professional members',
-    color: '#F7B731',
-  },
-  {
-    title: 'Regular User',
-    name: Role.USER,
-    description: 'Regular platform user',
-    color: '#A0A0A0',
   },
 ];
 
@@ -194,41 +172,9 @@ const permissionsData = [
   },
 ];
 
-// Define role-permission assignments
+// Define role-permission assignments (only for assignable roles)
 const rolePermissionsMap: Record<string, string[]> = {
-  [Role.SUPER_ADMIN]: [
-    'assign_role',
-    'manage_role_assignments',
-    'view_role_assignments',
-    'view_church_members',
-    'manage_church_members',
-    'add_church_members',
-    'edit_church_members',
-    'delete_church_members',
-    'manage_church_settings',
-    'view_church_settings',
-    'update_church_settings',
-    'manage_content',
-    'publish_content',
-    'view_content',
-  ],
   [Role.ADMIN]: [
-    'assign_role',
-    'manage_role_assignments',
-    'view_role_assignments',
-    'view_church_members',
-    'manage_church_members',
-    'add_church_members',
-    'edit_church_members',
-    'delete_church_members',
-    'manage_church_settings',
-    'view_church_settings',
-    'update_church_settings',
-    'manage_content',
-    'publish_content',
-    'view_content',
-  ],
-  [Role.CHURCH_ADMIN]: [
     'assign_role',
     'manage_role_assignments',
     'view_role_assignments',
@@ -277,34 +223,10 @@ const rolePermissionsMap: Record<string, string[]> = {
   ],
   [Role.HELPER]: ['view_church_members', 'view_content'],
   [Role.CHURCH_MEMBER]: ['view_content'],
-  [Role.PRO_USER]: ['view_content'],
-  [Role.USER]: ['view_content'],
 };
 
-// Define role assignment rules
+// Define role assignment rules (only for assignable roles)
 const roleAssignmentRules = [
-  { from_role: Role.SUPER_ADMIN, to_role: Role.ADMIN },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.CHURCH_ADMIN },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.PASTOR },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.ASSISTANT_PASTOR },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.CHURCH_LEADER },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.BACKGROUND_CHECKER },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.HELPER },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.CHURCH_MEMBER },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.PRO_USER },
-  { from_role: Role.SUPER_ADMIN, to_role: Role.USER },
-  { from_role: Role.ADMIN, to_role: Role.CHURCH_ADMIN },
-  { from_role: Role.ADMIN, to_role: Role.PASTOR },
-  { from_role: Role.ADMIN, to_role: Role.HELPER },
-  { from_role: Role.ADMIN, to_role: Role.CHURCH_MEMBER },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.PASTOR },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.ASSISTANT_PASTOR },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.CHURCH_LEADER },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.BACKGROUND_CHECKER },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.HELPER },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.CHURCH_MEMBER },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.PRO_USER },
-  { from_role: Role.CHURCH_ADMIN, to_role: Role.USER },
   { from_role: Role.CHURCH_LEADER, to_role: Role.HELPER },
   { from_role: Role.CHURCH_LEADER, to_role: Role.CHURCH_MEMBER },
   { from_role: Role.PASTOR, to_role: Role.HELPER },
@@ -315,7 +237,7 @@ const roleAssignmentRules = [
   { from_role: Role.BACKGROUND_CHECKER, to_role: Role.CHURCH_MEMBER },
 ];
 
-// Church data with passwords for the admin users
+// Church data
 const churchesData = [
   {
     name: 'Grace Community Church',
@@ -511,8 +433,8 @@ async function main() {
   console.log('='.repeat(60));
 
   try {
-    // Step 1: Create Superadmin User
-    console.log('📝 Step 1: Creating superadmin user...');
+    // Step 1: Create SUPER_ADMIN User
+    console.log('📝 Step 1: Creating SUPER_ADMIN user...');
     const superadminData = {
       first_name: 'System',
       last_name: 'Admin',
@@ -522,7 +444,7 @@ async function main() {
       phone_number: '+1234567890',
       church_name: 'System Administration',
       language: 'en',
-      type: 'SUPER_ADMIN' as const,
+      type: UserType.SUPER_ADMIN,
       status: UserStatus.ACTIVE,
     };
 
@@ -537,13 +459,43 @@ async function main() {
           email_verified_at: new Date(),
         },
       });
-      console.log(`✅ Superadmin created: ${superadmin.email}`);
+      console.log(`✅ SUPER_ADMIN created: ${superadmin.email}`);
     } else {
-      console.log(`✅ Superadmin already exists: ${superadmin.email}`);
+      console.log(`✅ SUPER_ADMIN already exists: ${superadmin.email}`);
     }
 
-    // Step 2: Create Roles
-    console.log('\n📝 Step 2: Creating roles...');
+    // Step 2: Create ADMIN User
+    console.log('\n📝 Step 2: Creating ADMIN user...');
+    const adminData = {
+      first_name: 'Platform',
+      last_name: 'Admin',
+      email: 'admin@platform.com',
+      password: await hashPassword('Password@123'),
+      phone_number: '+1234567891',
+      church_name: 'Platform Administration',
+      language: 'en',
+      type: UserType.ADMIN,
+      status: UserStatus.ACTIVE,
+    };
+
+    let platformAdmin = await prisma.user.findUnique({
+      where: { email: adminData.email },
+    });
+
+    if (!platformAdmin) {
+      platformAdmin = await prisma.user.create({
+        data: {
+          ...adminData,
+          email_verified_at: new Date(),
+        },
+      });
+      console.log(`✅ ADMIN created: ${platformAdmin.email}`);
+    } else {
+      console.log(`✅ ADMIN already exists: ${platformAdmin.email}`);
+    }
+
+    // Step 3: Create Assignable Roles (NOT UserTypes)
+    console.log('\n📝 Step 3: Creating assignable roles...');
     const createdRoles = new Map<string, any>();
     for (const role of rolesData) {
       let existingRole = await prisma.role.findFirst({
@@ -570,8 +522,8 @@ async function main() {
       createdRoles.set(role.name, createdRole);
     }
 
-    // Step 3: Create Permissions
-    console.log('\n📝 Step 3: Creating permissions...');
+    // Step 4: Create Permissions
+    console.log('\n📝 Step 4: Creating permissions...');
     const createdPermissions = new Map<string, any>();
     for (const permission of permissionsData) {
       let existingPermission = await prisma.permission.findUnique({
@@ -603,8 +555,8 @@ async function main() {
       createdPermissions.set(permission.name, createdPermission);
     }
 
-    // Step 4: Assign Permissions to Roles
-    console.log('\n📝 Step 4: Assigning permissions to roles...');
+    // Step 5: Assign Permissions to Roles
+    console.log('\n📝 Step 5: Assigning permissions to roles...');
     for (const [roleName, permissions] of Object.entries(rolePermissionsMap)) {
       const role = createdRoles.get(roleName);
       if (!role) {
@@ -642,8 +594,8 @@ async function main() {
       );
     }
 
-    // Step 5: Create Role Assignment Rules
-    console.log('\n📝 Step 5: Creating role assignment rules...');
+    // Step 6: Create Role Assignment Rules
+    console.log('\n📝 Step 6: Creating role assignment rules...');
     for (const rule of roleAssignmentRules) {
       const fromRole = createdRoles.get(rule.from_role);
       const toRole = createdRoles.get(rule.to_role);
@@ -681,15 +633,10 @@ async function main() {
       }
     }
 
-    // Step 6: Create Churches AND Church Admin Users
-    console.log('\n📝 Step 6: Creating churches and church admin users...');
+    // Step 7: Create Churches and CHURCH_ADMIN Users
+    console.log('\n📝 Step 7: Creating churches and CHURCH_ADMIN users...');
     const createdChurches = new Map<string, any>();
     const createdChurchMembers = new Map<string, any>();
-    const churchAdminRole = createdRoles.get(Role.CHURCH_ADMIN);
-
-    if (!churchAdminRole) {
-      throw new Error('CHURCH_ADMIN role not found!');
-    }
 
     for (const churchData of churchesData) {
       let existingChurch = await prisma.church.findFirst({
@@ -726,7 +673,7 @@ async function main() {
               phone_number: '',
               church_name: churchData.name,
               language: 'en',
-              type: 'CHURCH_ADMIN',
+              type: UserType.CHURCH_ADMIN,
               status: UserStatus.ACTIVE,
               email_verified_at: new Date(),
             },
@@ -745,15 +692,6 @@ async function main() {
             },
           });
 
-          await tx.roleUser.create({
-            data: {
-              role_id: churchAdminRole.id,
-              user_id: newAdminUser.id,
-              churchId: newChurch.id,
-              assigned_by_id: superadmin.id,
-            },
-          });
-
           await tx.church.update({
             where: { id: newChurch.id },
             data: { church_members: 1, user_id: newAdminUser.id },
@@ -769,7 +707,7 @@ async function main() {
           .get(churchData.name)
           .set(adminUser.id, result.churchMember);
         console.log(
-          `✅ Church created: ${churchData.name} with admin user ${churchData.email}`,
+          `✅ Church created: ${churchData.name} with CHURCH_ADMIN user ${churchData.email}`,
         );
       } else {
         church = existingChurch;
@@ -800,8 +738,8 @@ async function main() {
               `  ⚠️ Missing membership for ${adminUser.email}, creating...`,
             );
 
-            const result = await prisma.$transaction(async (tx) => {
-              const churchMember = await tx.churchMember.create({
+            const churchMember = await prisma.$transaction(async (tx) => {
+              const newChurchMember = await tx.churchMember.create({
                 data: {
                   id: randomUUID(),
                   church_id: church.id,
@@ -813,26 +751,6 @@ async function main() {
                   approved_at: new Date(),
                 },
               });
-
-              const existingRole = await tx.roleUser.findUnique({
-                where: {
-                  role_id_user_id: {
-                    role_id: churchAdminRole.id,
-                    user_id: adminUser.id,
-                  },
-                },
-              });
-
-              if (!existingRole) {
-                await tx.roleUser.create({
-                  data: {
-                    role_id: churchAdminRole.id,
-                    user_id: adminUser.id,
-                    churchId: church.id,
-                    assigned_by_id: superadmin.id,
-                  },
-                });
-              }
 
               const memberCount = await tx.churchMember.count({
                 where: {
@@ -847,13 +765,15 @@ async function main() {
                 data: { church_members: memberCount },
               });
 
-              return churchMember;
+              return newChurchMember;
             });
 
             if (!createdChurchMembers.get(churchData.name)) {
               createdChurchMembers.set(churchData.name, new Map());
             }
-            createdChurchMembers.get(churchData.name).set(adminUser.id, result);
+            createdChurchMembers
+              .get(churchData.name)
+              .set(adminUser.id, churchMember);
             console.log(
               `  ✅ Created missing membership for ${adminUser.email}`,
             );
@@ -873,8 +793,8 @@ async function main() {
       createdChurches.set(churchData.name, church);
     }
 
-    // Step 7: Create Additional Church Users
-    console.log('\n📝 Step 7: Creating additional church users...');
+    // Step 8: Create Additional Church Users (with UserType.USER or UserType.PRO_USER)
+    console.log('\n📝 Step 8: Creating additional church users...');
 
     const churchUsersData = {
       'Grace Community Church': [
@@ -883,8 +803,8 @@ async function main() {
           last_name: 'Anderson',
           email: 'pastor@gracechurch.org',
           phone: '+1 212 555 0002',
-          role: Role.PASTOR,
-          type: 'USER' as const,
+          assignable_role: Role.PASTOR,
+          user_type: UserType.USER,
           church_role: 'Pastor',
         },
         {
@@ -892,8 +812,8 @@ async function main() {
           last_name: 'Johnson',
           email: 'assistant_pastor@gracechurch.org',
           phone: '+1 212 555 0003',
-          role: Role.ASSISTANT_PASTOR,
-          type: 'USER' as const,
+          assignable_role: Role.ASSISTANT_PASTOR,
+          user_type: UserType.USER,
           church_role: 'Assistant Pastor',
         },
         {
@@ -901,8 +821,8 @@ async function main() {
           last_name: 'Chen',
           email: 'leader@gracechurch.org',
           phone: '+1 212 555 0110',
-          role: Role.CHURCH_LEADER,
-          type: 'USER' as const,
+          assignable_role: Role.CHURCH_LEADER,
+          user_type: UserType.USER,
           church_role: 'Church Leader',
         },
         {
@@ -910,8 +830,8 @@ async function main() {
           last_name: 'Wilson',
           email: 'checker@gracechurch.org',
           phone: '+1 212 555 0004',
-          role: Role.BACKGROUND_CHECKER,
-          type: 'USER' as const,
+          assignable_role: Role.BACKGROUND_CHECKER,
+          user_type: UserType.USER,
           church_role: 'Background Checker',
         },
         {
@@ -919,8 +839,8 @@ async function main() {
           last_name: 'Kim',
           email: 'helper@gracechurch.org',
           phone: '+1 212 555 0005',
-          role: Role.HELPER,
-          type: 'USER' as const,
+          assignable_role: Role.HELPER,
+          user_type: UserType.USER,
           church_role: 'Helper',
         },
         {
@@ -928,8 +848,8 @@ async function main() {
           last_name: 'Rodriguez',
           email: 'member@gracechurch.org',
           phone: '+1 212 555 0006',
-          role: Role.CHURCH_MEMBER,
-          type: 'USER' as const,
+          assignable_role: Role.CHURCH_MEMBER,
+          user_type: UserType.USER,
           church_role: 'Member',
         },
         {
@@ -937,18 +857,40 @@ async function main() {
           last_name: 'Wilson',
           email: 'pro@gracechurch.org',
           phone: '+1 212 555 0007',
-          role: Role.PRO_USER,
-          type: 'PRO_USER' as const,
-          church_role: 'Pro User',
+          assignable_role: null,
+          user_type: UserType.PRO_USER,
+          church_role: 'Professional Member',
+          is_professional: true,
         },
         {
           first_name: 'Regular',
           last_name: 'User',
           email: 'user@gracechurch.org',
           phone: '+1 212 555 0008',
-          role: Role.USER,
-          type: 'USER' as const,
+          assignable_role: null,
+          user_type: UserType.USER,
           church_role: 'Regular User',
+        },
+        // Additional PRO users for Grace Church
+        {
+          first_name: 'Sarah',
+          last_name: 'Johnson',
+          email: 'pro2@gracechurch.org',
+          phone: '+1 212 555 0009',
+          assignable_role: null,
+          user_type: UserType.PRO_USER,
+          church_role: 'Professional Member',
+          is_professional: true,
+        },
+        {
+          first_name: 'Michael',
+          last_name: 'Brown',
+          email: 'pro3@gracechurch.org',
+          phone: '+1 212 555 0010',
+          assignable_role: null,
+          user_type: UserType.PRO_USER,
+          church_role: 'Professional Member',
+          is_professional: true,
         },
       ],
       'Faith Assembly Church': [
@@ -957,8 +899,8 @@ async function main() {
           last_name: 'Williams',
           email: 'pastor@faithassembly.org',
           phone: '+1 310 555 0002',
-          role: Role.PASTOR,
-          type: 'USER' as const,
+          assignable_role: Role.PASTOR,
+          user_type: UserType.USER,
           church_role: 'Pastor',
         },
         {
@@ -966,8 +908,8 @@ async function main() {
           last_name: 'Brown',
           email: 'helper@faithassembly.org',
           phone: '+1 310 555 0003',
-          role: Role.HELPER,
-          type: 'USER' as const,
+          assignable_role: Role.HELPER,
+          user_type: UserType.USER,
           church_role: 'Helper',
         },
         {
@@ -975,9 +917,20 @@ async function main() {
           last_name: 'Davis',
           email: 'member@faithassembly.org',
           phone: '+1 310 555 0004',
-          role: Role.CHURCH_MEMBER,
-          type: 'USER' as const,
+          assignable_role: Role.CHURCH_MEMBER,
+          user_type: UserType.USER,
           church_role: 'Member',
+        },
+        // Add PRO users for Faith Church
+        {
+          first_name: 'Robert',
+          last_name: 'Taylor',
+          email: 'pro@faithassembly.org',
+          phone: '+1 310 555 0005',
+          assignable_role: null,
+          user_type: UserType.PRO_USER,
+          church_role: 'Professional Member',
+          is_professional: true,
         },
       ],
     };
@@ -996,53 +949,73 @@ async function main() {
       }
 
       for (const userData of users) {
-        const role = createdRoles.get(userData.role);
-        if (!role) {
-          console.log(
-            `⚠️ Role ${userData.role} not found for user ${userData.email}, skipping...`,
-          );
-          continue;
-        }
-
         let user = await prisma.user.findUnique({
           where: { email: userData.email },
         });
 
-        let churchMember;
-
         if (!user) {
+          const userCreateData: any = {
+            id: randomUUID(),
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            email: userData.email,
+            password: await hashPassword('Password@123'),
+            phone_number: userData.phone,
+            church_name: churchName,
+            language: 'en',
+            type: userData.user_type,
+            status: UserStatus.ACTIVE,
+            email_verified_at: new Date(),
+          };
+
+          // Add professional fields for PRO_USER type with different professions
+          if (userData.user_type === UserType.PRO_USER) {
+            let profession = 'Home Care Specialist';
+            let category = 'Home Services';
+            let description = 'Specializing in Smart Thermostats & Central AC';
+            let companyName = `${userData.first_name} ${userData.last_name} Services`;
+
+            if (userData.email.includes('pro2')) {
+              profession = 'Auto Mechanic';
+              category = 'Auto Services';
+              description = 'Expert in diagnostics and repairs';
+              companyName = `${userData.first_name} ${userData.last_name} Auto Repair`;
+            } else if (userData.email.includes('pro3')) {
+              profession = 'Electrician';
+              category = 'Electrical Services';
+              description = 'Licensed electrician for all your needs';
+              companyName = `${userData.first_name} ${userData.last_name} Electrical`;
+            }
+
+            userCreateData.company_name = companyName;
+            userCreateData.business_email = userData.email;
+            userCreateData.business_phone = userData.phone;
+            userCreateData.service = category;
+            userCreateData.category = category;
+            userCreateData.profession = profession;
+            userCreateData.available_time = 'Mon-Fri 9AM-6PM';
+            userCreateData.address_line1 = '123 Main Street';
+            userCreateData.state =
+              church.church_city === 'New York' ? 'NY' : 'CA';
+            userCreateData.country = 'USA';
+            userCreateData.zip_code =
+              church.church_city === 'New York' ? '10001' : '90001';
+            userCreateData.description = description;
+          }
+
           user = await prisma.user.create({
-            data: {
-              id: randomUUID(),
-              first_name: userData.first_name,
-              last_name: userData.last_name,
-              email: userData.email,
-              password: await hashPassword('Password@123'),
-              phone_number: userData.phone,
-              church_name: churchName,
-              language: 'en',
-              type: userData.type,
-              status: UserStatus.ACTIVE,
-              email_verified_at: new Date(),
-            },
+            data: userCreateData,
           });
           console.log(
-            `  ✅ User created: ${userData.first_name} ${userData.last_name} (${userData.role})`,
+            `  ✅ User created: ${userData.first_name} ${userData.last_name} (type: ${userData.user_type})`,
           );
         } else {
           console.log(
-            `  ✅ User already exists: ${userData.first_name} ${userData.last_name} (${userData.role})`,
+            `  ✅ User already exists: ${userData.first_name} ${userData.last_name} (type: ${user.type})`,
           );
-
-          if (!user.email_verified_at) {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { email_verified_at: new Date() },
-            });
-            console.log(`  ✅ Email verified for ${user.email}`);
-          }
         }
 
+        // Create church membership
         const existingMembership = await prisma.churchMember.findFirst({
           where: {
             church_id: church.id,
@@ -1050,6 +1023,7 @@ async function main() {
           },
         });
 
+        let churchMember;
         if (!existingMembership) {
           churchMember = await prisma.churchMember.create({
             data: {
@@ -1071,33 +1045,233 @@ async function main() {
 
         createdChurchMembers.get(churchName).set(user.id, churchMember);
 
-        const existingAssignment = await prisma.roleUser.findUnique({
-          where: {
-            role_id_user_id: {
-              role_id: role.id,
-              user_id: user.id,
-            },
-          },
-        });
+        // Assign assignable role only if provided
+        if (userData.assignable_role) {
+          const role = createdRoles.get(userData.assignable_role);
+          if (role) {
+            const existingAssignment = await prisma.roleUser.findUnique({
+              where: {
+                role_id_user_id: {
+                  role_id: role.id,
+                  user_id: user.id,
+                },
+              },
+            });
 
-        if (!existingAssignment) {
-          await prisma.roleUser.create({
-            data: {
-              role_id: role.id,
-              user_id: user.id,
-              assigned_by_id: superadmin?.id,
-              churchId: church.id,
-            },
-          });
-          console.log(`  ✅ Role assigned: ${userData.role}`);
-        } else {
-          console.log(`  ✅ Role already assigned: ${userData.role}`);
+            if (!existingAssignment) {
+              await prisma.roleUser.create({
+                data: {
+                  role_id: role.id,
+                  user_id: user.id,
+                  assigned_by_id: superadmin?.id,
+                  churchId: church.id,
+                },
+              });
+              console.log(
+                `  ✅ Assignable role assigned: ${userData.assignable_role}`,
+              );
+            } else {
+              console.log(
+                `  ✅ Assignable role already assigned: ${userData.assignable_role}`,
+              );
+            }
+          } else {
+            console.log(
+              `  ⚠️ Assignable role ${userData.assignable_role} not found`,
+            );
+          }
         }
       }
     }
 
-    // Step 8: Update church member counts
-    console.log('\n📝 Step 8: Updating church member counts...');
+    // Step 9: Create Follow relationships
+    console.log('\n📝 Step 9: Creating follow relationships...');
+
+    // Get all users from Grace Church
+    const graceChurch = createdChurches.get('Grace Community Church');
+    const faithChurch = createdChurches.get('Faith Assembly Church');
+
+    const graceChurchMembers = await prisma.user.findMany({
+      where: {
+        church_memberships: {
+          some: {
+            church_id: graceChurch.id,
+            status: ChurchMemberStatus.ACTIVE,
+          },
+        },
+      },
+    });
+
+    const graceProUsers = graceChurchMembers.filter(
+      (u) => u.type === UserType.PRO_USER,
+    );
+    const graceRegularUsers = graceChurchMembers.filter(
+      (u) => u.type === UserType.USER,
+    );
+
+    // Create follows - Regular users follow PRO users
+    for (const regularUser of graceRegularUsers) {
+      for (const proUser of graceProUsers) {
+        const existingFollow = await prisma.userFollow.findUnique({
+          where: {
+            follower_id_following_id: {
+              follower_id: regularUser.id,
+              following_id: proUser.id,
+            },
+          },
+        });
+
+        if (!existingFollow) {
+          await prisma.userFollow.create({
+            data: {
+              id: randomUUID(),
+              follower_id: regularUser.id,
+              following_id: proUser.id,
+              status: FollowStatus.ACTIVE,
+            },
+          });
+          console.log(
+            `  ✅ ${regularUser.first_name} follows ${proUser.first_name}`,
+          );
+        }
+      }
+    }
+
+    // Step 10: Create Reviews for PRO users
+    console.log('\n📝 Step 10: Creating reviews for PRO users...');
+
+    const graceChurchObj = await prisma.church.findFirst({
+      where: { church_email: 'admin@gracechurch.org' },
+    });
+
+    const faithChurchObj = await prisma.church.findFirst({
+      where: { church_email: 'admin@faithassembly.org' },
+    });
+
+    const reviewsData = [
+      {
+        reviewer_email: 'member@gracechurch.org',
+        pro_email: 'pro@gracechurch.org',
+        rating: 5,
+        comment:
+          'Amazing service! Alex arrived right on time and fixed my hvac issue within an hour. Very professional and tidy.',
+        images: [],
+        church_id: graceChurchObj?.id,
+      },
+      {
+        reviewer_email: 'helper@gracechurch.org',
+        pro_email: 'pro@gracechurch.org',
+        rating: 4,
+        comment:
+          'Great work! Very knowledgeable about smart thermostats. Would recommend.',
+        images: [],
+        church_id: graceChurchObj?.id,
+      },
+      {
+        reviewer_email: 'pastor@gracechurch.org',
+        pro_email: 'pro@gracechurch.org',
+        rating: 5,
+        comment:
+          'Excellent service! Helped us with our church AC system. Very responsive.',
+        images: [],
+        church_id: graceChurchObj?.id,
+      },
+      {
+        reviewer_email: 'member@gracechurch.org',
+        pro_email: 'pro2@gracechurch.org',
+        rating: 5,
+        comment:
+          "Fixed my car's engine issue quickly. Very professional mechanic!",
+        images: [],
+        church_id: graceChurchObj?.id,
+      },
+      {
+        reviewer_email: 'helper@gracechurch.org',
+        pro_email: 'pro3@gracechurch.org',
+        rating: 5,
+        comment:
+          'Installed new lighting in our church hall. Excellent work, very safe and professional.',
+        images: [],
+        church_id: graceChurchObj?.id,
+      },
+      {
+        reviewer_email: 'member@faithassembly.org',
+        pro_email: 'pro@faithassembly.org',
+        rating: 4,
+        comment:
+          'Good service, fixed my plumbing issue quickly. Would hire again.',
+        images: [],
+        church_id: faithChurchObj?.id,
+      },
+    ];
+
+    for (const reviewData of reviewsData) {
+      const reviewer = await prisma.user.findUnique({
+        where: { email: reviewData.reviewer_email },
+      });
+      const proUser = await prisma.user.findUnique({
+        where: { email: reviewData.pro_email },
+      });
+
+      if (reviewer && proUser && reviewData.church_id) {
+        const existingReview = await prisma.review.findUnique({
+          where: {
+            reviewer_id_reviewed_user_id: {
+              reviewer_id: reviewer.id,
+              reviewed_user_id: proUser.id,
+            },
+          },
+        });
+
+        if (!existingReview) {
+          const review = await prisma.review.create({
+            data: {
+              id: randomUUID(),
+              rating: reviewData.rating,
+              comment: reviewData.comment,
+              images: reviewData.images,
+              reviewer_id: reviewer.id,
+              reviewed_user_id: proUser.id,
+              church_id: reviewData.church_id,
+              status: ReviewStatus.PUBLISHED,
+            },
+          });
+          console.log(
+            `  ✅ Review created: ${reviewer.first_name} → ${proUser.first_name} (${reviewData.rating} stars)`,
+          );
+
+          // Add helpful votes to reviews
+          if (reviewData.rating === 5) {
+            const helpfulVoters = await prisma.user.findMany({
+              where: {
+                church_memberships: {
+                  some: {
+                    church_id: reviewData.church_id,
+                  },
+                },
+                id: { not: reviewer.id },
+              },
+              take: 3,
+            });
+
+            for (const voter of helpfulVoters) {
+              await prisma.reviewHelpfulVote.create({
+                data: {
+                  id: randomUUID(),
+                  review_id: review.id,
+                  user_id: voter.id,
+                  is_helpful: true,
+                },
+              });
+              console.log(`    ✅ Helpful vote from ${voter.first_name}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Step 11: Update church member counts
+    console.log('\n📝 Step 11: Updating church member counts...');
     for (const [churchName, church] of createdChurches) {
       const memberCount = await prisma.churchMember.count({
         where: {
@@ -1113,58 +1287,8 @@ async function main() {
       console.log(`  ✅ ${churchName}: ${memberCount} members`);
     }
 
-    // Step 9: Verify all CHURCH_ADMIN users have memberships
-    console.log(
-      '\n📝 Step 9: Verifying all CHURCH_ADMIN users have memberships...',
-    );
-    const churchAdmins = await prisma.user.findMany({
-      where: {
-        type: 'CHURCH_ADMIN',
-        status: UserStatus.ACTIVE,
-      },
-      include: {
-        church_memberships: true,
-      },
-    });
-
-    for (const admin of churchAdmins) {
-      if (admin.church_memberships.length === 0) {
-        console.log(`  ⚠️ Admin ${admin.email} has no church membership!`);
-
-        const church = await prisma.church.findFirst({
-          where: { church_email: admin.email },
-        });
-
-        if (church) {
-          const churchMember = await prisma.churchMember.create({
-            data: {
-              id: randomUUID(),
-              church_id: church.id,
-              user_id: admin.id,
-              church_role: 'Church Admin',
-              status: ChurchMemberStatus.ACTIVE,
-              joined_at: new Date(),
-              approved_by: superadmin.id,
-              approved_at: new Date(),
-            },
-          });
-          console.log(`  ✅ Created missing membership for ${admin.email}`);
-
-          const churchName = church.church_name;
-          if (!createdChurchMembers.get(churchName)) {
-            createdChurchMembers.set(churchName, new Map());
-          }
-          createdChurchMembers.get(churchName).set(admin.id, churchMember);
-        }
-      } else {
-        console.log(
-          `  ✅ ${admin.email} has ${admin.church_memberships.length} membership(s)`,
-        );
-      }
-    }
-
-    // Step 10: Create Church Posts, Comments, and Reacts
-    console.log('\n📝 Step 10: Creating church posts, comments, and reacts...');
+    // Step 12: Create Church Posts, Comments, and Reacts
+    console.log('\n📝 Step 12: Creating church posts, comments, and reacts...');
 
     for (const [churchName, church] of createdChurches) {
       const churchMembersMap = createdChurchMembers.get(churchName);
@@ -1190,6 +1314,7 @@ async function main() {
         const existingPost = await prisma.churchPost.findFirst({
           where: {
             church_id: church.id,
+            content: postData.content,
             deleted_at: null,
           },
         });
@@ -1204,7 +1329,9 @@ async function main() {
               church_member_id: churchMember.id,
             },
           });
-          console.log(`    ✅ Post created: ${postData.content}`);
+          console.log(
+            `    ✅ Post created: ${postData.content.substring(0, 50)}...`,
+          );
 
           // Add comments to each post
           for (let j = 0; j < Math.min(3, churchCommentsData.length); j++) {
@@ -1301,8 +1428,8 @@ async function main() {
       }
     }
 
-    // Step 11: Create Ads
-    console.log('\n📝 Step 11: Creating ads...');
+    // Step 13: Create Ads
+    console.log('\n📝 Step 13: Creating ads...');
     let adsCreated = 0;
     for (const adData of adsData) {
       const existingAd = await prisma.ad.findFirst({
@@ -1342,8 +1469,8 @@ async function main() {
       `  📊 Total ads created/found: ${adsCreated}/${adsData.length}`,
     );
 
-    // Step 12: Create sample ad metrics
-    console.log('\n📝 Step 12: Creating sample ad metrics...');
+    // Step 14: Create sample ad metrics
+    console.log('\n📝 Step 14: Creating sample ad metrics...');
     const ads = await prisma.ad.findMany();
     let metricsCreated = 0;
 
@@ -1384,24 +1511,17 @@ async function main() {
     }
     console.log(`  ✅ Created ${metricsCreated} daily metrics records`);
 
-    // Step 13: Create announcements
-    console.log('\n📝 Step 13: Creating announcements...');
-
-    const graceChurch = await prisma.church.findFirst({
-      where: { church_email: 'admin@gracechurch.org' },
-    });
-    const faithChurch = await prisma.church.findFirst({
-      where: { church_email: 'admin@faithassembly.org' },
-    });
+    // Step 15: Create announcements
+    console.log('\n📝 Step 15: Creating announcements...');
 
     const superAdminUser = await prisma.user.findFirst({
       where: { email: appConfig().defaultUser.system.email },
     });
 
-    const graceChurchAdmin = await prisma.user.findFirst({
+    const graceChurchAdminUser = await prisma.user.findFirst({
       where: { email: 'admin@gracechurch.org' },
     });
-    const faithChurchAdmin = await prisma.user.findFirst({
+    const faithChurchAdminUser = await prisma.user.findFirst({
       where: { email: 'admin@faithassembly.org' },
     });
 
@@ -1448,7 +1568,7 @@ async function main() {
         target_church_ids: graceChurch ? [graceChurch.id] : [],
         start_date: new Date('2025-12-20T00:00:00Z'),
         end_date: new Date('2025-12-25T23:59:59Z'),
-        created_by_id: graceChurchAdmin?.id,
+        created_by_id: graceChurchAdminUser?.id,
       },
       {
         title: 'Easter Sunday Celebration',
@@ -1459,7 +1579,7 @@ async function main() {
         target_church_ids: graceChurch ? [graceChurch.id] : [],
         start_date: new Date('2025-04-01T00:00:00Z'),
         end_date: new Date('2025-04-09T23:59:59Z'),
-        created_by_id: graceChurchAdmin?.id,
+        created_by_id: graceChurchAdminUser?.id,
       },
       {
         title: 'Faith Assembly Church Revival',
@@ -1470,7 +1590,7 @@ async function main() {
         target_church_ids: faithChurch ? [faithChurch.id] : [],
         start_date: new Date('2025-03-10T00:00:00Z'),
         end_date: new Date('2025-03-13T23:59:59Z'),
-        created_by_id: faithChurchAdmin?.id,
+        created_by_id: faithChurchAdminUser?.id,
       },
       {
         title: 'New Admin Training Session',
@@ -1561,138 +1681,22 @@ async function main() {
       `  📊 Total announcements created/found: ${announcementsCreated}/${announcementsData.length}`,
     );
 
-    // Step 14: Create Audit Logs (after announcements)
-    console.log('\n📝 Step 14: Creating audit logs...');
+    // Step 16: Create Audit Logs
+    console.log('\n📝 Step 16: Creating audit logs...');
 
-    // Get all users for actor references
-    const allUsers = await prisma.user.findMany({
-      include: {
-        churchUser: true,
-        church_memberships: {
-          include: { church: true },
-        },
-      },
-    });
-
-    // Helper function to safely get actor_id
     const getActorId = (user: any, actorName: string) => {
       if (user?.id) return user.id;
       console.log(`  ⚠️ Warning: ${actorName} user not found, using fallback`);
       return null;
     };
 
-    // Helper function to safely get church_id
     const getChurchId = (church: any, churchName: string) => {
       if (church?.id) return church.id;
       console.log(`  ⚠️ Warning: ${churchName} church not found`);
       return null;
     };
 
-    // Sample Audit Logs Data
     const auditLogsData = [
-      // ============================================
-      // SUPER ADMIN ACTIONS
-      // ============================================
-      {
-        actor: 'Super Admin',
-        action: 'Deleted Permission',
-        target: 'Manage Churches',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2026-02-14T17:08:25.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Deleted Permission',
-        target: 'James Cole — Grace NY',
-        church: 'Grace Community Church',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-11T09:14:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Deleted Permission',
-        target: 'Henry Park',
-        church: 'Hope Chapel',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-11T09:14:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Deleted Permission',
-        target: 'Bible Study App',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-11T09:14:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Deleted Permission',
-        target: 'Platform Maintenance',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-11T09:14:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Deleted Permission',
-        target: 'Hope Chapel',
-        church: 'Hope Chapel',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-11T09:14:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Deleted Permission',
-        target: 'Amara Diallo → Helper',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-11T09:14:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Deleted Permission',
-        target: 'Lisa Chen',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-11T09:14:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Assigned Role',
-        target: 'John Smith → Church Admin',
-        church: 'Grace Community Church',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-10T10:30:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Assigned Role',
-        target: 'Michael Johnson → Church Admin',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-09T14:20:00.000Z'),
-      },
       {
         actor: 'Super Admin',
         action: 'Created Church',
@@ -1714,429 +1718,61 @@ async function main() {
         created_at: new Date('2025-02-01T10:15:00.000Z'),
       },
       {
-        actor: 'Super Admin',
-        action: 'Activated User',
-        target: 'pastor@gracechurch.org',
-        church: 'Grace Community Church',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-05T11:45:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Suspended User',
-        target: 'suspended_user@example.com',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-08T16:30:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Created Announcement',
-        target: 'Platform Maintenance — Feb 15',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-08T12:00:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Created Ad',
-        target: 'Bible Study App – DigiSanctuary',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-01-10T08:00:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Updated Permission',
-        target: 'manage_church_members',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-12T15:20:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Exported Audit Logs',
-        target: 'audit-logs-2025-02-12.csv',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-12T18:00:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Created Role',
-        target: 'Worship Leader',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-13T11:00:00.000Z'),
-      },
-      {
-        actor: 'Super Admin',
-        action: 'Updated System Settings',
-        target: 'Email notification preferences',
-        church: '--',
-        actor_id: getActorId(superAdminUser, 'Super Admin'),
-        actor_type: 'SUPER_ADMIN',
-        church_id: null,
-        created_at: new Date('2025-02-11T14:30:00.000Z'),
-      },
-
-      // ============================================
-      // CHURCH ADMIN ACTIONS - Grace Community Church
-      // ============================================
-      {
         actor: 'John Smith',
         action: 'Added Church Member',
-        target: 'pastor@gracechurch.org → Pastor',
+        target: 'pastor@gracechurch.org',
         church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
+        actor_id: getActorId(graceChurchAdminUser, 'John Smith'),
         actor_type: 'CHURCH_ADMIN',
         church_id: getChurchId(graceChurch, 'Grace Community Church'),
         created_at: new Date('2025-02-15T09:30:00.000Z'),
       },
       {
-        actor: 'John Smith',
-        action: 'Assigned Role',
-        target: 'pastor@gracechurch.org → Pastor',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-15T09:35:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Added Church Member',
-        target: 'helper@gracechurch.org → Helper',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-16T10:00:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Assigned Role',
-        target: 'helper@gracechurch.org → Helper',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-16T10:05:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Created Church Post',
-        target: 'Amazing worship service this Sunday!',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-14T14:00:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Updated Church Settings',
-        target: 'Church description and service times',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-10T11:20:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Created Announcement',
-        target: 'Grace Church Christmas Service',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-12-20T09:00:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Removed Church Member',
-        target: 'inactive_member@gracechurch.org',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-18T13:45:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Updated Member Role',
-        target: 'member@gracechurch.org → Church Leader',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-17T15:30:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Deleted Church Post',
-        target: 'Outdated event announcement',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-13T16:00:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Approved Church Member',
-        target: 'new_member@gracechurch.org',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-12T09:00:00.000Z'),
-      },
-      {
-        actor: 'John Smith',
-        action: 'Exported Member List',
-        target: 'grace-church-members.csv',
-        church: 'Grace Community Church',
-        actor_id: getActorId(
-          graceChurchAdmin,
-          'John Smith (Grace Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-19T16:20:00.000Z'),
-      },
-
-      // ============================================
-      // CHURCH ADMIN ACTIONS - Faith Assembly Church
-      // ============================================
-      {
         actor: 'Michael Johnson',
         action: 'Added Church Member',
-        target: 'pastor@faithassembly.org → Pastor',
+        target: 'pastor@faithassembly.org',
         church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
+        actor_id: getActorId(faithChurchAdminUser, 'Michael Johnson'),
         actor_type: 'CHURCH_ADMIN',
         church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
         created_at: new Date('2025-02-14T11:00:00.000Z'),
       },
       {
-        actor: 'Michael Johnson',
-        action: 'Assigned Role',
-        target: 'pastor@faithassembly.org → Pastor',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-14T11:05:00.000Z'),
-      },
-      {
-        actor: 'Michael Johnson',
-        action: 'Added Church Member',
-        target: 'helper@faithassembly.org → Helper',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-15T09:00:00.000Z'),
-      },
-      {
-        actor: 'Michael Johnson',
-        action: 'Assigned Role',
-        target: 'member@faithassembly.org → Church Member',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-16T10:30:00.000Z'),
-      },
-      {
-        actor: 'Michael Johnson',
-        action: 'Created Church Post',
-        target: 'Faith Assembly Church Revival',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-12T15:00:00.000Z'),
-      },
-      {
-        actor: 'Michael Johnson',
-        action: 'Updated Church Settings',
-        target: 'Service times and location',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-11T13:45:00.000Z'),
-      },
-      {
-        actor: 'Michael Johnson',
-        action: 'Created Announcement',
-        target: 'Faith Assembly Church Revival',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-03-10T08:30:00.000Z'),
-      },
-      {
-        actor: 'Michael Johnson',
-        action: 'Exported Member List',
-        target: 'faith-church-members.csv',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-15T14:20:00.000Z'),
-      },
-      {
-        actor: 'Michael Johnson',
-        action: 'Removed Church Member',
-        target: 'inactive@faithassembly.org',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-17T11:00:00.000Z'),
-      },
-      {
-        actor: 'Michael Johnson',
-        action: 'Updated Church Banner',
-        target: 'New worship banner image',
-        church: 'Faith Assembly Church',
-        actor_id: getActorId(
-          faithChurchAdmin,
-          'Michael Johnson (Faith Church Admin)',
-        ),
-        actor_type: 'CHURCH_ADMIN',
-        church_id: getChurchId(faithChurch, 'Faith Assembly Church'),
-        created_at: new Date('2025-02-13T10:15:00.000Z'),
-      },
-
-      // ============================================
-      // REGULAR USER ACTIONS
-      // ============================================
-      {
-        actor: 'Father Michael Anderson',
-        action: 'Created Post',
-        target: 'Sunday sermon notes',
+        actor: 'Emily Rodriguez',
+        action: 'FOLLOW',
+        target: 'James Wilson',
         church: 'Grace Community Church',
-        actor_id: allUsers.find((u) => u.email === 'pastor@gracechurch.org')
-          ?.id,
+        actor_id: getActorId(
+          await prisma.user.findUnique({
+            where: { email: 'member@gracechurch.org' },
+          }),
+          'Emily Rodriguez',
+        ),
         actor_type: 'USER',
         church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-17T08:00:00.000Z'),
-      },
-      {
-        actor: 'David Kim',
-        action: 'Commented on Post',
-        target: 'Great message!',
-        church: 'Grace Community Church',
-        actor_id: allUsers.find((u) => u.email === 'helper@gracechurch.org')
-          ?.id,
-        actor_type: 'USER',
-        church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-17T09:15:00.000Z'),
+        created_at: new Date('2025-02-16T10:00:00.000Z'),
       },
       {
         actor: 'Emily Rodriguez',
-        action: 'Reacted to Post',
-        target: 'Liked the announcement',
+        action: 'REVIEW_ADDED',
+        target: 'James Wilson - 5 stars',
         church: 'Grace Community Church',
-        actor_id: allUsers.find((u) => u.email === 'member@gracechurch.org')
-          ?.id,
+        actor_id: getActorId(
+          await prisma.user.findUnique({
+            where: { email: 'member@gracechurch.org' },
+          }),
+          'Emily Rodriguez',
+        ),
         actor_type: 'USER',
         church_id: getChurchId(graceChurch, 'Grace Community Church'),
-        created_at: new Date('2025-02-17T09:30:00.000Z'),
+        created_at: new Date('2025-02-16T11:30:00.000Z'),
       },
     ];
 
-    // Insert audit logs
     let auditLogsCreated = 0;
     for (const logData of auditLogsData) {
-      // Skip if required actor_id is missing
       if (logData.actor_id === undefined || logData.actor_id === null) {
-        if (logData.actor !== 'Super Admin' || !superAdminUser) {
-          console.log(
-            `  ⚠️ Skipping audit log "${logData.action}" - actor not found`,
-          );
-          continue;
-        }
+        continue;
       }
 
       const existingLog = await prisma.auditLog.findFirst({
@@ -2167,40 +1803,43 @@ async function main() {
     }
     console.log(`  ✅ Created ${auditLogsCreated} audit log records`);
 
-    // Display recent audit logs by type
-    const superAdminLogs = await prisma.auditLog.count({
-      where: { actor_type: 'SUPER_ADMIN' },
-    });
-    const churchAdminLogs = await prisma.auditLog.count({
-      where: { actor_type: 'CHURCH_ADMIN' },
-    });
-    const userLogs = await prisma.auditLog.count({
-      where: { actor_type: 'USER' },
-    });
-
-    console.log(`  📊 Audit logs breakdown:`);
-    console.log(`     - Super Admin actions: ${superAdminLogs}`);
-    console.log(`     - Church Admin actions: ${churchAdminLogs}`);
-    console.log(`     - User actions: ${userLogs}`);
-
-    // Step 15: Display Summary (update the existing summary)
+    // Step 17: Display Summary
     console.log('\n' + '='.repeat(60));
     console.log('📊 SEEDING SUMMARY');
     console.log('='.repeat(60));
-    console.log(`✅ Superadmin: ${superadminData.email}`);
-    console.log(`✅ Roles created/found: ${rolesData.length}`);
-    console.log(`✅ Permissions created/found: ${permissionsData.length}`);
+    console.log(`✅ SUPER_ADMIN: ${superadminData.email}`);
+    console.log(`✅ ADMIN: ${adminData.email}`);
+    console.log(`✅ Assignable roles created: ${rolesData.length}`);
+    console.log(`✅ Permissions created: ${permissionsData.length}`);
     console.log(`✅ Role assignment rules: ${roleAssignmentRules.length}`);
-    console.log(`✅ Churches created/found: ${churchesData.length}`);
+    console.log(`✅ Churches created: ${churchesData.length}`);
 
     const totalUsers = await prisma.user.count();
     console.log(`✅ Total users: ${totalUsers}`);
+
+    const usersByType = await prisma.user.groupBy({
+      by: ['type'],
+      _count: true,
+    });
+    console.log(`   - User types breakdown:`);
+    for (const group of usersByType) {
+      console.log(`     * ${group.type}: ${group._count}`);
+    }
 
     const totalMemberships = await prisma.churchMember.count();
     console.log(`✅ Church memberships: ${totalMemberships}`);
 
     const totalRoleAssignments = await prisma.roleUser.count();
-    console.log(`✅ Role assignments: ${totalRoleAssignments}`);
+    console.log(`✅ Assignable role assignments: ${totalRoleAssignments}`);
+
+    const totalFollows = await prisma.userFollow.count();
+    console.log(`✅ Follow relationships: ${totalFollows}`);
+
+    const totalReviews = await prisma.review.count();
+    console.log(`✅ Reviews: ${totalReviews}`);
+
+    const totalHelpfulVotes = await prisma.reviewHelpfulVote.count();
+    console.log(`✅ Helpful votes: ${totalHelpfulVotes}`);
 
     const totalPosts = await prisma.churchPost.count();
     console.log(`✅ Church posts: ${totalPosts}`);
@@ -2217,33 +1856,11 @@ async function main() {
     const totalAds = await prisma.ad.count();
     console.log(`✅ Total ads: ${totalAds}`);
 
-    const totalAdMetrics = await prisma.adMetrics.count();
-    console.log(`✅ Total ad metric records: ${totalAdMetrics}`);
-
     const totalAnnouncements = await prisma.announcement.count();
     console.log(`✅ Total announcements: ${totalAnnouncements}`);
 
     const totalAuditLogs = await prisma.auditLog.count();
     console.log(`✅ Total audit logs: ${totalAuditLogs}`);
-
-    // Verify data integrity
-    const adminsWithoutMembership = await prisma.user.count({
-      where: {
-        type: 'CHURCH_ADMIN',
-        status: UserStatus.ACTIVE,
-        church_memberships: {
-          none: {},
-        },
-      },
-    });
-
-    if (adminsWithoutMembership > 0) {
-      console.log(
-        `\n⚠️ WARNING: ${adminsWithoutMembership} CHURCH_ADMIN(s) without membership!`,
-      );
-    } else {
-      console.log(`\n✅ All CHURCH_ADMIN users have valid church memberships`);
-    }
 
     console.log('\n🎉 Database seeding completed successfully!');
   } catch (error) {

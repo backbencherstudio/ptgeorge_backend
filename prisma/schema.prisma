@@ -115,7 +115,7 @@ model User {
   portfolio_images String[] @db.Text
 
   // Skills and expertise
-  skills     skills[] @relation("UserSkills")
+  skills skills[] @relation("UserSkills")
 
   //----------------------------------------
   bio           String?   @db.Text
@@ -159,8 +159,141 @@ model User {
   // ann
   created_announcements Announcement[] @relation("UserCreatedAnnouncements")
 
+  // Follow relationships
+  following UserFollow[] @relation("Following")
+  followers UserFollow[] @relation("Followers")
+
+  // Reviews received (as a PRO_USER)
+  received_reviews Review[] @relation("ReviewedUser")
+
+  // Reviews written (as a reviewer)
+  written_reviews Review[] @relation("ReviewAuthor")
+
+  // Review helpful votes
+  review_helpful_votes ReviewHelpfulVote[]
+
+  // Review replies
+  review_replies ReviewReply[]
+
   @@map("users")
 }
+
+// ==========================================
+// FOLLOW SYSTEM
+// ==========================================
+
+model UserFollow {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  follower_id String
+  follower    User @relation("Following", fields: [follower_id], references: [id], onDelete: Cascade)
+
+  following_id String
+  following    User @relation("Followers", fields: [following_id], references: [id], onDelete: Cascade)
+
+  status FollowStatus @default(ACTIVE)
+
+  @@unique([follower_id, following_id])
+  @@index([follower_id])
+  @@index([following_id])
+  @@index([created_at])
+  @@map("user_follows")
+}
+
+enum FollowStatus {
+  ACTIVE
+  BLOCKED
+  REQUESTED
+}
+
+// ==========================================
+// REVIEW SYSTEM
+// ==========================================
+
+model Review {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  deleted_at DateTime?
+
+  rating     Int     @db.SmallInt
+  comment    String? @db.Text
+  images     String[] @db.Text
+
+  reviewer_id String
+  reviewer    User @relation("ReviewAuthor", fields: [reviewer_id], references: [id], onDelete: Cascade)
+
+  reviewed_user_id String
+  reviewed_user    User @relation("ReviewedUser", fields: [reviewed_user_id], references: [id], onDelete: Cascade)
+
+  helpful_votes ReviewHelpfulVote[]
+  replies       ReviewReply[]
+
+  church_id String
+  church    Church @relation("ChurchReviews", fields: [church_id], references: [id], onDelete: Cascade)
+
+  status ReviewStatus @default(PUBLISHED)
+
+  @@unique([reviewer_id, reviewed_user_id])
+  @@index([reviewed_user_id])
+  @@index([reviewer_id])
+  @@index([rating])
+  @@index([created_at])
+  @@index([church_id])
+  @@map("reviews")
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+  FLAGGED
+}
+
+model ReviewHelpfulVote {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  review_id String
+  review    Review @relation(fields: [review_id], references: [id], onDelete: Cascade)
+
+  user_id String
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  is_helpful Boolean @default(true)
+
+  @@unique([review_id, user_id])
+  @@index([review_id])
+  @@index([user_id])
+  @@map("review_helpful_votes")
+}
+
+model ReviewReply {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  deleted_at DateTime?
+
+  comment String  @db.Text
+  images  String[] @db.Text
+
+  review_id String
+  review    Review @relation(fields: [review_id], references: [id], onDelete: Cascade)
+
+  reply_by_id String
+  reply_by    User @relation(fields: [reply_by_id], references: [id], onDelete: Cascade)
+
+  @@index([review_id])
+  @@index([reply_by_id])
+  @@index([created_at])
+  @@map("review_replies")
+}
+
+// ==========================================
+// REST OF THE SCHEMA
+// ==========================================
 
 model Ucode {
   id         String   @id @default(cuid())
@@ -194,12 +327,9 @@ model skills {
   @@map("skills")
 }
 
-
-
-
 /**
  * ---------------------------------------------------------------------
- * Church Schema with Posts, Comments, Reacts (No Community Layer)
+ * Church Schema with Posts, Comments, Reacts
  * ---------------------------------------------------------------------
  */
 
@@ -259,6 +389,7 @@ model Church {
   roleUsers RoleUser[]
   members   ChurchMember[] @relation("ChurchToMembers")
   posts     ChurchPost[]   @relation("ChurchToPosts")
+  reviews   Review[]       @relation("ChurchReviews")
 
   @@map("churches")
 }
@@ -283,7 +414,6 @@ model ChurchMember {
   approved_at DateTime?
   notes       String?   @db.Text
 
-  // Posts, comments, reacts directly under member
   posts   ChurchPost[]        @relation("MemberToPosts")
   comments ChurchComment[]    @relation("MemberToComments")
   reacts   ChurchPostReact[]  @relation("MemberToReacts")
@@ -296,14 +426,13 @@ model ChurchMember {
   @@map("church_members")
 }
 
-// Church Post (Directly under Church, no Community)
 model ChurchPost {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
   deleted_at DateTime?
 
-  images    String[]  @db.Text // Array of multiple images
+  images    String[]  @db.Text
   content   String?   @db.Text
 
   church_id String
@@ -321,7 +450,6 @@ model ChurchPost {
   @@map("church_posts")
 }
 
-// Church Comment
 model ChurchComment {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
@@ -345,7 +473,6 @@ model ChurchComment {
   @@map("church_comments")
 }
 
-// Church Comment Reply
 model ChurchCommentReply {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
@@ -367,7 +494,6 @@ model ChurchCommentReply {
   @@map("church_comment_replies")
 }
 
-// Church Post React
 model ChurchPostReact {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
@@ -483,6 +609,8 @@ enum NotificationSettingType {
   NEW_REQUEST_ALERT
   APPROVAL_CONFIRMATION
   ROLE_ASSIGNMENT_ALERT
+  NEW_REVIEW_ALERT
+  NEW_FOLLOW_ALERT
 }
 
 model UserNotificationSetting {
@@ -794,22 +922,26 @@ enum AuditAction {
   DELETED_PERMISSION
   ASSIGNED_ROLE
   REVOKED_ROLE
+  FOLLOW
+  UNFOLLOW
+  REVIEW_ADDED
+  REVIEW_UPDATED
+  REVIEW_DELETED
+  REVIEW_HELPFUL_VOTE
 }
 
 model AuditLog {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
   
-  // Main fields matching your image
-  actor    String  // Who performed the action (e.g., "Super Admin", "John Doe")
-  action   String  // What action (e.g., "Deleted Permission", "Assigned Role")
-  target   String  // Target of action (e.g., "Manage Churches", "James Cole — Grace NY")
-  church   String? // Which church this belongs to (optional, "--" if none)
+  actor    String
+  action   String
+  target   String
+  church   String?
   
-  // Additional metadata for filtering
   actor_id   String?
-  actor_type String? // SUPER_ADMIN, CHURCH_ADMIN, etc.
-  church_id  String? // For church-specific filtering
+  actor_type String?
+  church_id  String?
   
   @@index([created_at(sort: Desc)])
   @@index([actor])

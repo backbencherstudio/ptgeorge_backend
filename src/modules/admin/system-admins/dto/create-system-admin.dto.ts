@@ -50,10 +50,24 @@ export class CreateSystemAdminDto {
     description: 'Array of permission IDs to assign to this admin',
     example: ['clxperm001abc', 'clxperm002abc'],
     type: [String],
+    required: false,
   })
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  permissions: string[];
+  permissions?: string[];
+
+  @ApiProperty({
+    description:
+      'Array of category names to assign (all permissions under these categories will be assigned)',
+    example: ['Church', 'Member', 'Content'],
+    type: [String],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  categories?: string[];
 
   @ApiProperty({
     enum: UserStatus,

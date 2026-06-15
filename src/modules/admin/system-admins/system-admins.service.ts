@@ -8,11 +8,12 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
-import { UserStatus, UserType } from 'prisma/generated/enums';
 import {
   CreateSystemAdminDto,
   UpdateSystemAdminDto,
 } from './dto/create-system-admin.dto';
+import { randomUUID } from 'crypto';
+import { UserStatus, UserType } from 'prisma/generated/enums';
 
 @Injectable()
 export class SystemAdminService {
@@ -75,19 +76,21 @@ export class SystemAdminService {
     }
   }
 
-  // ─── Helper: Get or create personal role for admin ────────────────────────
-  // Each admin gets their own isolated role so permissions don't bleed between admins
-  private async getOrCreateAdminPersonalRole(userId: string, userName: string) {
+  // ─── Helper: Get admin role ────────────────────────────────────────────────
+  private async getOrCreateAdminRole(userId: string, userName: string) {
     const roleName = `admin_role_${userId}`;
     let role = await this.prisma.role.findFirst({
       where: { name: roleName, deleted_at: null },
     });
+
     if (!role) {
       role = await this.prisma.role.create({
         data: {
+          id: randomUUID(),
           title: `Admin Role - ${userName}`,
           name: roleName,
           description: `Personal role for system admin ${userName}`,
+          color: '#FF6B6B',
           status: 1,
         },
       });
@@ -95,12 +98,14 @@ export class SystemAdminService {
     return role;
   }
 
-  // ─── Helper: Sync permissions for an admin (replaces all existing) ────────
+  // ─── Helper: Sync permissions for admin ────────────────────────────────────
   private async syncAdminPermissions(
     userId: string,
     userName: string,
     permissionIds: string[],
   ) {
+    if (!permissionIds.length) return;
+
     // Validate all permission IDs exist and are active
     const permissions = await this.prisma.permission.findMany({
       where: { id: { in: permissionIds }, deleted_at: null, status: 'ACTIVE' },
@@ -114,28 +119,11 @@ export class SystemAdminService {
       );
     }
 
-    // Use transaction for permission sync
-    return await this.prisma.$transaction(async (tx) => {
-      const role = await tx.role.findFirst({
-        where: { name: `admin_role_${userId}`, deleted_at: null },
-      });
+    await this.prisma.$transaction(async (tx) => {
+      const role = await this.getOrCreateAdminRole(userId, userName);
+      const roleId = role.id;
 
-      let roleId: string;
-      if (!role) {
-        const newRole = await tx.role.create({
-          data: {
-            title: `Admin Role - ${userName}`,
-            name: `admin_role_${userId}`,
-            description: `Personal role for system admin ${userName}`,
-            status: 1,
-          },
-        });
-        roleId = newRole.id;
-      } else {
-        roleId = role.id;
-      }
-
-      // Replace all permissions (delete old, insert new)
+      // Replace all permissions
       await tx.permissionRole.deleteMany({
         where: { role_id: roleId },
       });
@@ -146,7 +134,6 @@ export class SystemAdminService {
             permission_id: permId,
             role_id: roleId,
           })),
-          skipDuplicates: true,
         });
       }
 
@@ -154,20 +141,28 @@ export class SystemAdminService {
       const existingAssignment = await tx.roleUser.findUnique({
         where: { role_id_user_id: { role_id: roleId, user_id: userId } },
       });
+
       if (!existingAssignment) {
         await tx.roleUser.create({
-          data: { role_id: roleId, user_id: userId },
+          data: {
+            role_id: roleId,
+            user_id: userId,
+            assigned_by_id: userId,
+          },
         });
       }
-
-      return { id: roleId };
     });
   }
 
-  // ─── Helper: roles include for queries ────────────────────────────────────
+  // ─── Helper: Get roles include for queries ─────────────────────────────────
   private get rolesInclude() {
     return {
       roles_assigned_to_me: {
+        where: {
+          role: {
+            name: { startsWith: 'admin_role_' },
+          },
+        },
         include: {
           role: {
             include: {
@@ -181,6 +176,7 @@ export class SystemAdminService {
                       action: true,
                       category: true,
                       status: true,
+                      description: true,
                     },
                   },
                 },
@@ -192,20 +188,38 @@ export class SystemAdminService {
     };
   }
 
-  // ─── Helper: Format user response ─────────────────────────────────────────
+  // ─── Helper: Format user response ──────────────────────────────────────────
   private formatUser(user: any) {
     const permissionsMap = new Map<string, any>();
+    const permissionsByCategory: Record<string, any[]> = {};
+
     if (user.roles_assigned_to_me) {
       for (const roleUser of user.roles_assigned_to_me) {
         if (roleUser.role?.permission_roles) {
           for (const permRole of roleUser.role.permission_roles) {
             if (permRole.permission) {
-              permissionsMap.set(permRole.permission.id, permRole.permission);
+              const perm = permRole.permission;
+              permissionsMap.set(perm.id, perm);
+
+              // Group by category
+              const category = perm.category || 'Uncategorized';
+              if (!permissionsByCategory[category]) {
+                permissionsByCategory[category] = [];
+              }
+              permissionsByCategory[category].push({
+                id: perm.id,
+                title: perm.title,
+                name: perm.name,
+                action: perm.action,
+                category: perm.category,
+                description: perm.description,
+              });
             }
           }
         }
       }
     }
+
     const permissions = Array.from(permissionsMap.values());
 
     return {
@@ -221,12 +235,21 @@ export class SystemAdminService {
       created_at: user.created_at,
       updated_at: user.updated_at,
       email_verified_at: user.email_verified_at,
-      permissions, // full permission objects
-      permission_ids: permissions.map((p) => p.id), // just IDs for easy reference
+      total_permissions: permissions.length,
+      permissions_by_category: permissionsByCategory,
+      permissions: permissions.map((p) => ({
+        id: p.id,
+        title: p.title,
+        name: p.name,
+        action: p.action,
+        category: p.category,
+        description: p.description,
+      })),
+      permission_ids: permissions.map((p) => p.id),
     };
   }
 
-  // ─── Helper: Fetch admin with permissions ─────────────────────────────────
+  // ─── Helper: Fetch admin with permissions ──────────────────────────────────
   private async getAdminWithPermissions(userId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deleted_at: null, type: UserType.ADMIN },
@@ -249,11 +272,35 @@ export class SystemAdminService {
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const userName = `${dto.first_name} ${dto.last_name}`;
-    const permissionIds = dto.permissions ?? [];
 
-    // Use transaction to ensure user creation and permission sync are atomic
+    // Determine which permissions to assign
+    let permissionIds: string[] = [];
+
+    if (dto.categories && dto.categories.length > 0) {
+      // Get all permissions from selected categories
+      const permissionsByCategory = await this.prisma.permission.findMany({
+        where: {
+          category: { in: dto.categories },
+          deleted_at: null,
+          status: 'ACTIVE',
+        },
+        select: { id: true },
+      });
+
+      permissionIds = permissionsByCategory.map((p) => p.id);
+
+      if (permissionIds.length === 0) {
+        throw new BadRequestException(
+          `No permissions found for categories: ${dto.categories.join(', ')}`,
+        );
+      }
+    } else if (dto.permissions && dto.permissions.length > 0) {
+      permissionIds = dto.permissions;
+    }
+
+    // Use transaction for user creation and permission sync
     const result = await this.prisma.$transaction(async (tx) => {
-      // Create user
+      // Create user with type: ADMIN
       const user = await tx.user.create({
         data: {
           first_name: dto.first_name,
@@ -265,71 +312,40 @@ export class SystemAdminService {
           language: dto.language || 'en',
           type: UserType.ADMIN,
           status: dto.status || UserStatus.ACTIVE,
+          email_verified_at: new Date(),
         },
       });
 
-      // Get or create role and sync permissions
-      const role = await tx.role.findFirst({
-        where: { name: `admin_role_${user.id}`, deleted_at: null },
+      // Create admin role
+      const role = await tx.role.create({
+        data: {
+          id: randomUUID(),
+          title: `Admin Role - ${userName}`,
+          name: `admin_role_${user.id}`,
+          description: `Custom role for system admin ${userName} with ${permissionIds.length} permissions`,
+          color: '#FF6B6B',
+          status: 1,
+        },
       });
 
-      let roleId: string;
-      if (!role) {
-        const newRole = await tx.role.create({
-          data: {
-            title: `Admin Role - ${userName}`,
-            name: `admin_role_${user.id}`,
-            description: `Personal role for system admin ${userName}`,
-            status: 1,
-          },
-        });
-        roleId = newRole.id;
-      } else {
-        roleId = role.id;
-      }
-
-      // Delete existing permissions if any
-      await tx.permissionRole.deleteMany({
-        where: { role_id: roleId },
-      });
-
-      // Add new permissions
+      // Assign permissions to role
       if (permissionIds.length > 0) {
-        // Validate permissions exist
-        const permissions = await tx.permission.findMany({
-          where: {
-            id: { in: permissionIds },
-            deleted_at: null,
-            status: 'ACTIVE',
-          },
-        });
-
-        if (permissions.length !== permissionIds.length) {
-          const foundIds = new Set(permissions.map((p) => p.id));
-          const missing = permissionIds.filter((id) => !foundIds.has(id));
-          throw new BadRequestException(
-            `Permission IDs not found or inactive: ${missing.join(', ')}`,
-          );
-        }
-
         await tx.permissionRole.createMany({
-          data: permissionIds.map((permId) => ({
-            permission_id: permId,
-            role_id: roleId,
+          data: permissionIds.map((permissionId) => ({
+            permission_id: permissionId,
+            role_id: role.id,
           })),
-          skipDuplicates: true,
         });
       }
 
       // Assign role to user
-      const existingAssignment = await tx.roleUser.findUnique({
-        where: { role_id_user_id: { role_id: roleId, user_id: user.id } },
+      await tx.roleUser.create({
+        data: {
+          role_id: role.id,
+          user_id: user.id,
+          assigned_by_id: createdByUserId,
+        },
       });
-      if (!existingAssignment) {
-        await tx.roleUser.create({
-          data: { role_id: roleId, user_id: user.id },
-        });
-      }
 
       return user;
     });
@@ -337,7 +353,7 @@ export class SystemAdminService {
     await this.createAuditLog(
       createdByUserId,
       'CREATED_ADMIN',
-      `Created system admin: ${userName} (${dto.email}) with ${permissionIds.length} permissions`,
+      `Created system admin: ${userName} (${dto.email}) with ${permissionIds.length} permissions${dto.categories ? ` from categories: ${dto.categories.join(', ')}` : ''}`,
       null,
       '--',
     );
@@ -347,6 +363,41 @@ export class SystemAdminService {
       message: 'System admin created successfully',
       data: await this.getAdminWithPermissions(result.id),
     };
+  }
+
+  // ─── GET AVAILABLE CATEGORIES ──────────────────────────────────────────────
+  async getAvailableCategories() {
+    const categories = await this.prisma.permission.findMany({
+      where: {
+        deleted_at: null,
+        status: 'ACTIVE',
+      },
+      select: {
+        category: true,
+      },
+      distinct: ['category'],
+      orderBy: { category: 'asc' },
+    });
+
+    // Get permission count per category
+    const categoriesWithCount = await Promise.all(
+      categories.map(async (cat) => {
+        const count = await this.prisma.permission.count({
+          where: {
+            category: cat.category,
+            deleted_at: null,
+            status: 'ACTIVE',
+          },
+        });
+
+        return {
+          category: cat.category || 'Uncategorized',
+          permission_count: count,
+        };
+      }),
+    );
+
+    return categoriesWithCount;
   }
 
   // ─── FIND ALL ──────────────────────────────────────────────────────────────
@@ -439,7 +490,7 @@ export class SystemAdminService {
     if (dto.status && dto.status !== existingUser.status)
       changes.push(`status: ${existingUser.status} → ${dto.status}`);
 
-    // Use transaction for update to ensure user update and permission sync are atomic
+    // Use transaction for update
     const result = await this.prisma.$transaction(async (tx) => {
       // Update user
       const user = await tx.user.update({
@@ -450,70 +501,10 @@ export class SystemAdminService {
       // Update permissions if provided
       if (dto.permissions !== undefined) {
         const userName = `${user.first_name} ${user.last_name}`;
-        const permissionIds = dto.permissions;
-
-        // Validate permissions exist
-        const permissions = await tx.permission.findMany({
-          where: {
-            id: { in: permissionIds },
-            deleted_at: null,
-            status: 'ACTIVE',
-          },
-        });
-
-        if (permissions.length !== permissionIds.length) {
-          const foundIds = new Set(permissions.map((p) => p.id));
-          const missing = permissionIds.filter((id) => !foundIds.has(id));
-          throw new BadRequestException(
-            `Permission IDs not found or inactive: ${missing.join(', ')}`,
-          );
-        }
-
-        const role = await tx.role.findFirst({
-          where: { name: `admin_role_${id}`, deleted_at: null },
-        });
-
-        let roleId: string;
-        if (!role) {
-          const newRole = await tx.role.create({
-            data: {
-              title: `Admin Role - ${userName}`,
-              name: `admin_role_${id}`,
-              description: `Personal role for system admin ${userName}`,
-              status: 1,
-            },
-          });
-          roleId = newRole.id;
-        } else {
-          roleId = role.id;
-        }
-
-        // Replace all permissions
-        await tx.permissionRole.deleteMany({
-          where: { role_id: roleId },
-        });
-
-        if (permissionIds.length > 0) {
-          await tx.permissionRole.createMany({
-            data: permissionIds.map((permId) => ({
-              permission_id: permId,
-              role_id: roleId,
-            })),
-            skipDuplicates: true,
-          });
-        }
-
-        // Ensure user is assigned this role
-        const existingAssignment = await tx.roleUser.findUnique({
-          where: { role_id_user_id: { role_id: roleId, user_id: id } },
-        });
-        if (!existingAssignment) {
-          await tx.roleUser.create({
-            data: { role_id: roleId, user_id: id },
-          });
-        }
-
-        changes.push(`permissions updated (${permissionIds.length} assigned)`);
+        await this.syncAdminPermissions(id, userName, dto.permissions || []);
+        changes.push(
+          `permissions updated (${dto.permissions?.length || 0} assigned)`,
+        );
       }
 
       return user;
@@ -549,13 +540,9 @@ export class SystemAdminService {
     const statusMessage =
       newStatus === UserStatus.ACTIVE ? 'activated' : 'suspended';
 
-    // Use transaction for status update
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const result = await tx.user.update({
-        where: { id },
-        data: { status: newStatus, updated_at: new Date() },
-      });
-      return result;
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { status: newStatus, updated_at: new Date() },
     });
 
     await this.createAuditLog(
@@ -583,12 +570,9 @@ export class SystemAdminService {
     if (deletedByUserId === id)
       throw new ForbiddenException('You cannot delete your own admin account');
 
-    // Use transaction for soft delete
-    await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id },
-        data: { deleted_at: new Date(), status: UserStatus.SUSPENDED },
-      });
+    await this.prisma.user.update({
+      where: { id },
+      data: { deleted_at: new Date(), status: UserStatus.SUSPENDED },
     });
 
     await this.createAuditLog(

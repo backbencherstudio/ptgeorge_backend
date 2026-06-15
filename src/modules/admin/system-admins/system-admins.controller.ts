@@ -39,21 +39,23 @@ import { SystemAdminService } from './system-admins.service';
 export class SystemAdminController {
   constructor(private readonly systemAdminService: SystemAdminService) {}
 
-  // ─── POST /system-admins ────────────────────────────────────────────────────
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a new system admin',
     description: `Creates a new system administrator with selected permissions.
 
-The super admin selects permission IDs from the permissions list and assigns them directly to the new admin.
-Each admin gets their own isolated permission set.`,
+**Two ways to assign permissions:**
+1. **By category** - Provide category names, all permissions under those categories will be assigned
+2. **By specific permissions** - Provide individual permission IDs
+
+If both are provided, categories take precedence.`,
   })
   @ApiBody({
     type: CreateSystemAdminDto,
     examples: {
-      full_admin: {
-        summary: 'Admin with permissions',
+      by_categories: {
+        summary: 'Assign permissions by categories',
         value: {
           first_name: 'Tom',
           last_name: 'Reeves',
@@ -61,18 +63,18 @@ Each admin gets their own isolated permission set.`,
           password: 'SecurePass123!',
           phone_number: '+1234567890',
           language: 'en',
-          permissions: ['clxperm001abc', 'clxperm002abc', 'clxperm003abc'],
+          categories: ['Church', 'Member', 'Content'],
           status: 'ACTIVE',
         },
       },
-      no_permissions: {
-        summary: 'Admin with no permissions yet',
+      by_permissions: {
+        summary: 'Assign specific permissions',
         value: {
           first_name: 'Lisa',
           last_name: 'Chen',
           email: 'lisa@platform.com',
           password: 'SecurePass123!',
-          permissions: [],
+          permissions: ['perm_id_1', 'perm_id_2', 'perm_id_3'],
         },
       },
     },
@@ -81,7 +83,21 @@ Each admin gets their own isolated permission set.`,
     return this.systemAdminService.create(dto, req.user?.id);
   }
 
-  // ─── GET /system-admins ─────────────────────────────────────────────────────
+  @Get('categories')
+  @ApiOperation({
+    summary: 'Get available permission categories',
+    description:
+      'Returns all permission categories with their permission counts for selection',
+  })
+  async getAvailableCategories() {
+    const categories = await this.systemAdminService.getAvailableCategories();
+    return {
+      success: true,
+      message: 'Categories fetched successfully',
+      data: categories,
+    };
+  }
+
   @Get()
   @ApiOperation({
     summary: 'Get all system admins',
@@ -107,12 +123,11 @@ Each admin gets their own isolated permission set.`,
     return this.systemAdminService.findAll(pageNumber, limitNumber, search);
   }
 
-  // ─── GET /system-admins/:id ─────────────────────────────────────────────────
   @Get(':id')
   @ApiOperation({
     summary: 'Get a single system admin by ID',
     description:
-      'Returns full system admin details including all assigned permissions.',
+      'Returns full system admin details including all assigned permissions grouped by category.',
   })
   @ApiParam({
     name: 'id',
@@ -123,7 +138,6 @@ Each admin gets their own isolated permission set.`,
     return this.systemAdminService.findOne(id);
   }
 
-  // ─── PATCH /system-admins/:id ───────────────────────────────────────────────
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a system admin',
@@ -171,7 +185,6 @@ Omit \`permissions\` entirely to leave permissions unchanged.`,
     return this.systemAdminService.update(id, dto, req.user?.id);
   }
 
-  // ─── PATCH /system-admins/:id/status ────────────────────────────────────────
   @Patch(':id/status')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -187,7 +200,6 @@ Omit \`permissions\` entirely to leave permissions unchanged.`,
     return this.systemAdminService.toggleStatus(id, req.user?.id);
   }
 
-  // ─── DELETE /system-admins/:id ───────────────────────────────────────────────
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

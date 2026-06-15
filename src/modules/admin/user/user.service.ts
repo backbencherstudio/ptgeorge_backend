@@ -24,8 +24,6 @@ import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 export class UserService {
   constructor(
     private prisma: PrismaService,
-    private userRepository: UserRepository,
-    private mailService: MailService,
   ) {}
 
   async createUserByAdmin(createUserDto: CreateUserDto, adminId: string) {

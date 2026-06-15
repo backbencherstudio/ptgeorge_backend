@@ -96,7 +96,13 @@ export class CommunityService {
   private getFullImageUrl(fileName: string, type: string): string | null {
     if (!fileName) return null;
     if (fileName.startsWith('http')) return fileName;
-    return TanvirStorage.url(`${appConfig().storageUrl[type]}/${fileName}`);
+
+    // Get the base URL from app config
+    const baseUrl = appConfig().app.url;
+
+    // The actual public path should include 'public' before the storage path
+    // Since files are served from /public/storage/...
+    return `${baseUrl}/public/storage${appConfig().storageUrl[type]}/${fileName}`;
   }
 
   private getFullImageUrls(fileNames: string[], type: string): string[] {
@@ -810,9 +816,10 @@ export class CommunityService {
   }
 
   async getCommentsForPost(
-    postId: string, userId: string, paginationDto: PaginationDto) {
-    
-
+    postId: string,
+    userId: string,
+    paginationDto: PaginationDto,
+  ) {
     const { page = 1, perPage = 10 } = paginationDto || {};
 
     const post = await this.prisma.churchPost.findUnique({
@@ -860,7 +867,10 @@ export class CommunityService {
         author: {
           id: comment.church_member.user.id,
           name: `${comment.church_member.user.first_name} ${comment.church_member.user.last_name}`,
-          avatar: this.getFullImageUrl(comment.church_member.user.avatar, 'avatar'),
+          avatar: this.getFullImageUrl(
+            comment.church_member.user.avatar,
+            'avatar',
+          ),
           role: authorRole,
         },
         // replies omitted by request
@@ -878,10 +888,7 @@ export class CommunityService {
         has_more: skip + comments.length < total,
       },
     };
-
   }
-
-
 
   async deleteComment(commentId: string, userId: string) {
     const comment = await this.prisma.churchComment.findUnique({

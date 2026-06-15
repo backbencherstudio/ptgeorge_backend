@@ -165,60 +165,163 @@ After registration:
   }
 
   // User login endpoint
+  // User login endpoint
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Unified Login',
-    description: `Authenticate a user. All users (including church admins) login through this endpoint.
+    description: `Authenticate a user. All users login through this endpoint.
 
-**Test Credentials:**
+**User Types vs Assignable Roles:**
+- \`user.type\` determines system-level access (SUPER_ADMIN, ADMIN, CHURCH_ADMIN, PRO_USER, USER)
+- Assignable roles (CHURCH_LEADER, PASTOR, HELPER, etc.) provide church-specific permissions
 
-| Role | Email | Password |
-|------|-------|----------|
-| Super Admin | superadmin@gmail.com | SuperAdmin@123 |
-| Church Admin (Grace) | admin@gracechurch.org | Password@123 |
-| Pastor (Grace) | pastor@gracechurch.org | Password@123 |
-| Helper (Grace) | helper@gracechurch.org | Password@123 |
-| Church Member (Grace) | member@gracechurch.org | Password@123 |
-| Verified Pro (Grace) | pro@gracechurch.org | Password@123 |
-| Church Admin (Faith) | admin@faithassembly.org | Password@123 |
-| Pastor (Faith) | pastor@faithassembly.org | Password@123 |`,
+**Test Credentials by User Type:**
+
+| User Type | Email | Password | Assignable Role |
+|-----------|-------|----------|-----------------|
+| **SUPER_ADMIN** | superadmin@gmail.com | SuperAdmin@123 | N/A |
+| **ADMIN** | admin@platform.com | Password@123 | N/A |
+| **CHURCH_ADMIN (Grace)** | admin@gracechurch.org | Password@123 | N/A |
+| **CHURCH_ADMIN (Faith)** | admin@faithassembly.org | Password@123 | N/A |
+| **USER (Pastor - Grace)** | pastor@gracechurch.org | Password@123 | PASTOR |
+| **USER (Assistant Pastor - Grace)** | assistant_pastor@gracechurch.org | Password@123 | ASSISTANT_PASTOR |
+| **USER (Church Leader - Grace)** | leader@gracechurch.org | Password@123 | CHURCH_LEADER |
+| **USER (Background Checker - Grace)** | checker@gracechurch.org | Password@123 | BACKGROUND_CHECKER |
+| **USER (Helper - Grace)** | helper@gracechurch.org | Password@123 | HELPER |
+| **USER (Church Member - Grace)** | member@gracechurch.org | Password@123 | CHURCH_MEMBER |
+| **PRO_USER (Verified Pro - Grace)** | pro@gracechurch.org | Password@123 | N/A |
+| **USER (Regular User - Grace)** | user@gracechurch.org | Password@123 | N/A |
+| **USER (Pastor - Faith)** | pastor@faithassembly.org | Password@123 | PASTOR |
+| **USER (Helper - Faith)** | helper@faithassembly.org | Password@123 | HELPER |
+| **USER (Church Member - Faith)** | member@faithassembly.org | Password@123 | CHURCH_MEMBER |
+
+**Note:** 
+- SUPER_ADMIN and ADMIN have system-wide access
+- CHURCH_ADMIN users have full control over their specific church
+- PRO_USER users are verified professionals with additional profile fields
+- Regular USER users can have assignable roles (PASTOR, HELPER, etc.) for church-specific permissions`,
   })
   @ApiBody({
     type: UnifiedLoginDto,
     examples: {
       super_admin: {
-        summary: 'Super Admin Login',
+        summary: 'Super Admin Login (System-wide access)',
+        description: 'User type: SUPER_ADMIN',
         value: {
           email: appConfig().defaultUser.system.email || 'superadmin@gmail.com',
           password: appConfig().defaultUser.system.password || 'SuperAdmin@123',
         },
       },
-      church_admin: {
-        summary: 'Church Admin Login',
+      admin: {
+        summary: 'Platform Admin Login',
+        description: 'User type: ADMIN',
+        value: {
+          email: 'admin@platform.com',
+          password: 'Password@123',
+        },
+      },
+      church_admin_grace: {
+        summary: 'Church Admin - Grace Community Church',
+        description: 'User type: CHURCH_ADMIN',
         value: {
           email: 'admin@gracechurch.org',
           password: 'Password@123',
         },
       },
-      pastor: {
-        summary: 'Pastor Login',
+      church_admin_faith: {
+        summary: 'Church Admin - Faith Assembly Church',
+        description: 'User type: CHURCH_ADMIN',
+        value: {
+          email: 'admin@faithassembly.org',
+          password: 'Password@123',
+        },
+      },
+      pastor_grace: {
+        summary: 'Pastor - Grace Community Church',
+        description: 'User type: USER, Assignable role: PASTOR',
         value: {
           email: 'pastor@gracechurch.org',
           password: 'Password@123',
         },
       },
-      helper: {
-        summary: 'Helper Login',
+      assistant_pastor_grace: {
+        summary: 'Assistant Pastor - Grace Community Church',
+        description: 'User type: USER, Assignable role: ASSISTANT_PASTOR',
+        value: {
+          email: 'assistant_pastor@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      church_leader_grace: {
+        summary: 'Church Leader - Grace Community Church',
+        description: 'User type: USER, Assignable role: CHURCH_LEADER',
+        value: {
+          email: 'leader@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      background_checker_grace: {
+        summary: 'Background Checker - Grace Community Church',
+        description: 'User type: USER, Assignable role: BACKGROUND_CHECKER',
+        value: {
+          email: 'checker@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      helper_grace: {
+        summary: 'Helper - Grace Community Church',
+        description: 'User type: USER, Assignable role: HELPER',
         value: {
           email: 'helper@gracechurch.org',
           password: 'Password@123',
         },
       },
-      member: {
-        summary: 'Church Member Login',
+      church_member_grace: {
+        summary: 'Church Member - Grace Community Church',
+        description: 'User type: USER, Assignable role: CHURCH_MEMBER',
         value: {
           email: 'member@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      pro_user_grace: {
+        summary: 'Verified Professional - Grace Community Church',
+        description: 'User type: PRO_USER (No assignable role)',
+        value: {
+          email: 'pro@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      regular_user_grace: {
+        summary: 'Regular User - Grace Community Church',
+        description: 'User type: USER (No assignable role)',
+        value: {
+          email: 'user@gracechurch.org',
+          password: 'Password@123',
+        },
+      },
+      pastor_faith: {
+        summary: 'Pastor - Faith Assembly Church',
+        description: 'User type: USER, Assignable role: PASTOR',
+        value: {
+          email: 'pastor@faithassembly.org',
+          password: 'Password@123',
+        },
+      },
+      helper_faith: {
+        summary: 'Helper - Faith Assembly Church',
+        description: 'User type: USER, Assignable role: HELPER',
+        value: {
+          email: 'helper@faithassembly.org',
+          password: 'Password@123',
+        },
+      },
+      church_member_faith: {
+        summary: 'Church Member - Faith Assembly Church',
+        description: 'User type: USER, Assignable role: CHURCH_MEMBER',
+        value: {
+          email: 'member@faithassembly.org',
           password: 'Password@123',
         },
       },

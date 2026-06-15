@@ -80,7 +80,7 @@ export default () => ({
    */
   storageUrl: {
     rootUrl: './public/storage',
-    rootUrlPublic: '/storage',
+    rootUrlPublic: '/public/storage',
     // storage directory
     package: '/package',
     destination: '/destination',
@@ -88,6 +88,7 @@ export default () => ({
     avatar: '/avatar',
     portfolio: '/portfolio',
     post: '/post',
+    review: '/review',
     comment: '/comment',
     reply: '/reply',
     websiteInfo: '/website-info',

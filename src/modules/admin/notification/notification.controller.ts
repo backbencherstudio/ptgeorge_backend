@@ -7,9 +7,10 @@ import { RolesGuard } from '../../../common/guard/role/roles.guard';
 import { JwtAuthGuard } from '../../../modules/auth/guards/jwt-auth.guard';
 import { Request } from 'express';
 import { UpdateNotificationSettingDto } from './dto/update-notification.dto';
+import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 
-@ApiBearerAuth()
+@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 @ApiTags('Notification')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin/notification')

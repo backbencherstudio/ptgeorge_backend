@@ -2,6 +2,32 @@ import { Injectable } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { PrismaService } from '../../../prisma/prisma.service';
 
+// Initialize Firebase Admin SDK once using environment variables.
+const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY;
+const firebaseProjectId = process.env.FIREBASE_PROJECT_ID;
+const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+if (!admin.apps.length) {
+  if (firebasePrivateKey && firebaseProjectId && firebaseClientEmail) {
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: firebaseProjectId,
+          clientEmail: firebaseClientEmail,
+          privateKey: firebasePrivateKey.replace(/\\n/g, '\n'),
+        }),
+      });
+      console.log('💯 Firebase initialized successfully.');
+    } catch (error) {
+      console.error('❌ Firebase initialization failed:', error);
+    }
+  } else {
+    console.warn(
+      '⚠️ Firebase credentials missing in env. Push notifications will not work.',
+    );
+  }
+}
+
 export type NotificationType =
   | 'NEW_REQUEST_ALERT'
   | 'APPROVAL_CONFIRMATION'

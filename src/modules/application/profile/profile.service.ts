@@ -9,6 +9,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { CreateSkillDto } from './dto/create-skill.dto';
+import { onlySendUserNotification, sendAdminNotification } from 'src/common/repository/notification/utils/notification.utils';
 
 @Injectable()
 export class ProfileService {
@@ -225,6 +226,15 @@ export class ProfileService {
       data: data,
     });
 
+    await onlySendUserNotification({
+      sender_id: userId,
+      receiver_id: userId,
+      text: 'Profile updated successfully',
+      type: 'profile_update',
+      entity_id: userId,
+    });
+
+
     return {
       success: true,
       message: 'Profile updated successfully',
@@ -315,9 +325,19 @@ export class ProfileService {
       },
     });
 
+
+    await onlySendUserNotification({
+      sender_id: userId,
+      receiver_id: userId,
+      text: 'Portfolio images updated successfully',
+      type: 'profile_update',
+      entity_id: userId,
+    });
+
+
     return {
       success: true,
-      message: 'Portfolio updated successfully',
+      message: 'Portfolio images updated successfully',
       data: {
         portfolio_images: updatedUser.portfolio_images,
         total: updatedUser.portfolio_images.length,

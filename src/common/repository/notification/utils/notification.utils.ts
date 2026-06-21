@@ -1,6 +1,5 @@
-import { NotificationRepository } from "../notification.repository";
+import { NotificationRepository, prisma } from "../notification.repository";
 import type { NotificationType } from "../notification.repository";
-import { PrismaService } from "../../../../prisma/prisma.service";
 
 /*----------------------(Send Admin Notification)----------------------*/
 
@@ -13,8 +12,6 @@ type SendAdminNotificationPayload = {
 
 export const sendAdminNotification = async (
   payload: SendAdminNotificationPayload,
-  prisma: PrismaService,
-  notificationRepo: NotificationRepository,
 ) => {
   const adminUser = await prisma.user.findFirst({
     where: {
@@ -34,7 +31,7 @@ export const sendAdminNotification = async (
     entity_id: payload.entity_id || payload.sender_id,
   };
 
-  return await notificationRepo.createNotification(notificationPayload);
+  return await NotificationRepository.createNotification(notificationPayload);
 };
 
 /*-----------------------(Send User Notification)----------------------*/
@@ -48,13 +45,9 @@ type SendUserNotificationPayload = {
   entity_id?: string;
 };
 
-
-
 export const sendUserNotification = async (
 
   payload: SendUserNotificationPayload,
-  prisma: PrismaService,
-  notificationRepo: NotificationRepository,
 ) => {
   const notificationPayload = {
     ...payload,
@@ -62,11 +55,11 @@ export const sendUserNotification = async (
     entity_id: payload.entity_id ?? payload.sender_id,
   };
 
-  return await notificationRepo.createNotification(notificationPayload);
+  return await NotificationRepository.createNotification(notificationPayload);
 };
 
 
-/*-----------------(Only Send User Notification)----------------*/
+/*-----------------------(Only Send User Notification)----------------------*/
 
 
 type SendMeNotificationPayload = {
@@ -80,12 +73,10 @@ type SendMeNotificationPayload = {
 
 export const onlySendUserNotification = async (
   payload: SendMeNotificationPayload,
-  prisma: PrismaService,
-  notificationRepo: NotificationRepository,
 ) => {
   const notificationPayload = {
     ...payload,
     entity_id: payload.entity_id ?? payload.sender_id,
   };
-  return await notificationRepo.createNotification(notificationPayload);
+  return await NotificationRepository.createNotification(notificationPayload);
 };

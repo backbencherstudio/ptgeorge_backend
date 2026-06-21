@@ -1,8 +1,12 @@
-import { Injectable } from '@nestjs/common';
 import * as admin from 'firebase-admin';
-import { PrismaService } from '../../../prisma/prisma.service';
+import { PrismaPg } from '@prisma/adapter-pg';
+import appConfig from '../../../config/app.config';
+import { PrismaClient } from '../../../../prisma/generated/client';
 
-// Initialize Firebase Admin SDK once using environment variables.
+const connectionString = appConfig().database.url;
+const adapter = new PrismaPg({ connectionString });
+export const prisma = new PrismaClient({ adapter });
+
 const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY;
 const firebaseProjectId = process.env.FIREBASE_PROJECT_ID;
 const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -17,79 +21,79 @@ if (!admin.apps.length) {
           privateKey: firebasePrivateKey.replace(/\\n/g, '\n'),
         }),
       });
-      console.log('💯 Firebase initialized successfully.');
+      console.log('💯💯💯 Firebase initialized successfully. 💯💯💯');
     } catch (error) {
       console.error('❌ Firebase initialization failed:', error);
     }
   } else {
     console.warn(
-      '⚠️ Firebase credentials missing in env. Push notifications will not work.',
+      '⚠️ Firebase credentials missing in .env file. Push notifications will not work.',
     );
   }
 }
 
 export type NotificationType =
-  | 'NEW_REQUEST_ALERT'
-  | 'APPROVAL_CONFIRMATION'
-  | 'PROLE_ASSIGNMENT_ALERT';
+  | 'new_user_registration'
+  | 'new_user_created'
+  | 'email_verification'
+  | 'account_verification'
+  | 'verification_approved'
+  | 'verification_rejected'
+  | 'profile_update'
+  | 'danger_request'
+  | 'account_action'
+  | 'create_booking'
+  | 'approve_booking'
+  | 'complete_booking'
+  | 'started_booking'
+  | 'submitted_job'
+  | 'approve_job_submission'
+  | 'reject_job_submission'
+  | 'conversation_created'
+  | 'cancel_booking'
+  |  'role_created'
+  | 'community'
+  | 'cleaner_verification_update'
+  | 'review_booking'
+  | 'update_commission'
+  | 'update_booking';
 
-@Injectable()
 export class NotificationRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async createNotification({
-    sender_id,
-    receiver_id,
-    text,
-    type,
-    entity_id,
-  }: {
-    sender_id?: string;
-    receiver_id?: string;
-    text?: string;
-    type?: NotificationType;
-    entity_id?: string;
+  
+  // create notification
+  static async createNotification(payload: {
+    sender_id?: string | null;
+    receiver_id: string;
+    text: string;
+    type: NotificationType;
+    entity_id: string;
   }) {
+    let { sender_id, receiver_id, text, type, entity_id } = payload;
+    const safeSenderId = sender_id === 'system' ? null : sender_id ?? null;
+
     try {
-      const notificationEventData = {};
-      if (type) {
-        notificationEventData['type'] = type;
-      }
-      if (text) {
-        notificationEventData['text'] = text;
-      }
-      
-      const notificationEvent = await this.prisma.notificationEvent.create({
-        data: {
-          type: type,
-          text: text,
-          ...notificationEventData,
-        },
+      let notificationEvent = await prisma.notificationEvent.findFirst({
+        where: { type, text },
       });
 
-      const notificationData = {};
-      if (sender_id) {
-        notificationData['sender_id'] = sender_id;
-      }
-      if (receiver_id) {
-        notificationData['receiver_id'] = receiver_id;
-      }
-      if (entity_id) {
-        notificationData['entity_id'] = entity_id;
+      if (!notificationEvent) {
+        notificationEvent = await prisma.notificationEvent.create({
+          data: { type, text },
+        });
       }
 
-      const notification = await this.prisma.notification.create({
+      const newNotification = await prisma.notification.create({
         data: {
+          sender_id: safeSenderId,
+          receiver_id,
+          entity_id,
           notification_event_id: notificationEvent.id,
-          ...notificationData,
         },
       });
 
-      if (receiver_id && type && text) {
-        await this.sendPushNotification(receiver_id, type, text, entity_id);
-      }
+      await this.sendPushNotification(receiver_id, type, text, entity_id);
 
-      return notification;
+      return newNotification;
     } catch (error) {
       console.error('Error creating notification:', error);
       throw error;
@@ -97,11 +101,11 @@ export class NotificationRepository {
   }
 
   // send push notification using firebase
-  private async sendPushNotification(
+  private static async sendPushNotification(
     receiverId: string,
     type: string,
     text: string,
-    entityId?: string,
+    entityId: string,
   ) {
     if (!admin.apps.length) {
       console.warn(
@@ -111,7 +115,7 @@ export class NotificationRepository {
     }
 
     try {
-      const user = await this.prisma.user.findUnique({
+      const user = await prisma.user.findUnique({
         where: { id: receiverId },
         select: { fcm_token: true },
       });
@@ -123,8 +127,9 @@ export class NotificationRepository {
             title: this.getNotificationTitle(type),
             body: text,
           },
+
           data: {
-            entity_id: entityId ? String(entityId) : '',
+            entity_id: String(entityId),
             type: String(type),
             click_action: 'FLUTTER_NOTIFICATION_CLICK',
           },
@@ -142,14 +147,32 @@ export class NotificationRepository {
   }
 
   // get notification title based on type
-  private getNotificationTitle(type: string): string {
+  private static getNotificationTitle(type: string): string {
     const titles: Record<string, string> = {
-      new_request_alert: 'New Request Alert',
-      approval_confirmation: 'Approval Confirmation',
-      role_assignment_alert: 'Role Assignment Alert',
-      
+      new_user_registration: 'New User Registration',
+      new_user_created: 'New User Created',
+      email_verification: 'Email Verification',
+      account_verification: 'Account Verification',
+      verification_approved: 'Verification Approved',
+      verification_rejected: 'Verification Rejected',
+      profile_update: 'Profile Updated',
+      danger_request: 'Danger Request',
+      account_action: 'Account Action',
+
+      create_booking: 'Booking Created',
+      approve_booking: 'Booking Approved',
+      complete_booking: 'Booking Completed',
+      started_job: 'Job Started',
+      submitted_job: 'Job Submitted',
+      approve_job_submission: 'Job Submission Approved',
+      reject_job_submission: 'Job Submission Rejected',
+      cancel_booking: 'Booking Cancelled',
+      review_booking: 'Booking Reviewed',
+      update_booking: 'Booking Updated',
     };
 
     return titles[type] || 'New Notification';
   }
+
+  
 }

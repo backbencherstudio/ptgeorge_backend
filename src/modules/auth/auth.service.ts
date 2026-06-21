@@ -37,6 +37,9 @@ import {
   ResetPasswordDto,
   VerifyOtpDto,
 } from './dto/forgot-password.dto';
+import { sendAdminNotification } from 'src/common/repository/notification/utils/notification.utils';
+import { NotificationRepository } from 'src/common/repository/notification/notification.repository';
+import { text } from 'stream/consumers';
 
 @Injectable()
 export class AuthService {
@@ -47,6 +50,7 @@ export class AuthService {
     private userRepository: UserRepository,
     private ucodeRepository: UcodeRepository,
     @InjectRedis() private readonly redis: Redis,
+    private notificationRepository: NotificationRepository,
   ) {}
 
   //
@@ -303,6 +307,15 @@ export class AuthService {
       console.error('Failed to send OTP email:', emailError);
     }
 
+     /*------------------------------------------
+        Notification for registration start
+    ------------------------------------------*/
+      
+     /*------------------------------------------
+        Notification for registration end
+     ------------------------------------------*/
+        
+
     // 10. Return response
     return {
       success: true,
@@ -411,6 +424,8 @@ export class AuthService {
       // TODO: Verify 2FA token
     }
 
+     
+   
     const currentRole = user.roles_assigned_to_me[0]?.role;
 
     console.log(

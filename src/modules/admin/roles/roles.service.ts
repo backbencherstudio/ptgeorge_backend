@@ -8,6 +8,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-roles.dto';
 import { UpdateRoleDto } from './dto/update-roles.dto';
 import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
+import { sendAdminNotification } from 'src/common/repository/notification/utils/notification.utils';
 
 @Injectable()
 export class RolesService {
@@ -129,6 +130,13 @@ export class RolesService {
       null,
       '--',
     );
+
+    await sendAdminNotification({
+        sender_id: userId,
+        text: `Role "${role.title}" has been created`,
+        type: 'role_created',
+        entity_id: role.id,
+    })
 
     return {
       message: 'Role created successfully',

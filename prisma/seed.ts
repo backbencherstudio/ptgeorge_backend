@@ -438,9 +438,9 @@ async function main() {
     const superadminData = {
       first_name: 'System',
       last_name: 'Admin',
-      username: appConfig().defaultUser.system.username,
-      email: appConfig().defaultUser.system.email,
-      password: await hashPassword(appConfig().defaultUser.system.password),
+      username: appConfig().defaultUser?.system?.username || 'admin',
+      email: appConfig().defaultUser?.system?.email || 'admin@ptgeorge.com',
+      password: await hashPassword(appConfig().defaultUser?.system?.password || 'Password@123'),
       phone_number: '+1234567890',
       church_name: 'System Administration',
       language: 'en',
@@ -1803,7 +1803,135 @@ async function main() {
     }
     console.log(`  ✅ Created ${auditLogsCreated} audit log records`);
 
-    // Step 17: Display Summary
+    // Step 17: Create Notification Settings and Notifications
+    console.log('\n📝 Step 17: Creating user notification settings and notifications...');
+
+    const allUsers = await prisma.user.findMany();
+    const notificationTypes = [
+      'NEW_REQUEST_ALERT',
+      'APPROVAL_CONFIRMATION',
+      'ROLE_ASSIGNMENT_ALERT',
+      'NEW_REVIEW_ALERT',
+      'NEW_FOLLOW_ALERT',
+    ];
+
+    let notificationSettingsCreated = 0;
+    let notificationsCreated = 0;
+
+    // Create notification settings for each user
+    for (const user of allUsers) {
+      for (const type of notificationTypes) {
+        const existingSetting = await prisma.userNotificationSetting.findUnique({
+          where: {
+            user_id_type: {
+              user_id: user.id,
+              type: type as any,
+            },
+          },
+        });
+
+        if (!existingSetting) {
+          await prisma.userNotificationSetting.create({
+            data: {
+              id: randomUUID(),
+              user_id: user.id,
+              type: type as any,
+              is_enabled: true,
+            },
+          });
+          notificationSettingsCreated++;
+        }
+      }
+    }
+    console.log(`  ✅ Created ${notificationSettingsCreated} notification settings`);
+
+    // Create sample notifications for users
+    const notificationMessages: Record<string, { type: string; text: string }> =
+      {
+        NEW_REQUEST_ALERT: {
+          type: 'New request from a member',
+          text: 'You have a new service request waiting for your response.',
+        },
+        APPROVAL_CONFIRMATION: {
+          type: 'Your membership was approved',
+          text: 'Congratulations! Your church membership has been approved.',
+        },
+        ROLE_ASSIGNMENT_ALERT: {
+          type: 'You have been assigned a new role',
+          text: 'Your church has assigned you a new role with updated permissions.',
+        },
+        NEW_REVIEW_ALERT: {
+          type: 'New review on your profile',
+          text: 'Someone has left a new review on your professional profile.',
+        },
+        NEW_FOLLOW_ALERT: {
+          type: 'New follower',
+          text: 'A new member has started following your profile.',
+        },
+      };
+
+    for (const user of allUsers) {
+      // Create 3-5 notifications for each user (mix of read and unread)
+      const notificationCount = Math.floor(Math.random() * 3) + 3;
+
+      for (let i = 0; i < notificationCount; i++) {
+        const randomType =
+          notificationTypes[Math.floor(Math.random() * notificationTypes.length)];
+        const msg = notificationMessages[randomType];
+
+        // Create notification event if needed
+        let notificationEvent = await prisma.notificationEvent.findFirst({
+          where: { type: msg.type },
+        });
+
+        if (!notificationEvent) {
+          notificationEvent = await prisma.notificationEvent.create({
+            data: {
+              id: randomUUID(),
+              type: msg.type,
+              text: msg.text,
+              status: 1,
+            },
+          });
+        }
+
+        // Create notification (some read, some unread)
+        const isRead = Math.random() > 0.3; // 70% read, 30% unread
+        const daysAgo = Math.floor(Math.random() * 30) + 1; // 1-30 days ago
+        const createdDate = new Date();
+        createdDate.setDate(createdDate.getDate() - daysAgo);
+
+        const notificationData: any = {
+          id: randomUUID(),
+          created_at: createdDate,
+          receiver_id: user.id,
+          notification_event_id: notificationEvent.id,
+          status: 1,
+        };
+
+        if (isRead) {
+          notificationData.read_at = new Date(createdDate.getTime() + 3600000); // Read 1 hour later
+        }
+
+        // Check if similar notification already exists for this user
+        const existingNotif = await prisma.notification.findFirst({
+          where: {
+            receiver_id: user.id,
+            notification_event_id: notificationEvent.id,
+          },
+        });
+
+        if (!existingNotif) {
+          await prisma.notification.create({
+            data: notificationData,
+          });
+          notificationsCreated++;
+        }
+      }
+    }
+    console.log(`  ✅ Created ${notificationsCreated} notifications`);
+
+    // Step 18: Display Summary
     console.log('\n' + '='.repeat(60));
     console.log('📊 SEEDING SUMMARY');
     console.log('='.repeat(60));
@@ -1861,6 +1989,12 @@ async function main() {
 
     const totalAuditLogs = await prisma.auditLog.count();
     console.log(`✅ Total audit logs: ${totalAuditLogs}`);
+
+    const totalNotificationSettings = await prisma.userNotificationSetting.count();
+    console.log(`✅ Notification settings: ${totalNotificationSettings}`);
+
+    const totalNotifications = await prisma.notification.count();
+    console.log(`✅ Total notifications: ${totalNotifications}`);
 
     console.log('\n🎉 Database seeding completed successfully!');
   } catch (error) {

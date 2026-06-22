@@ -573,6 +573,7 @@ model Message {
  * ---------------------------------------------------------------------
  */
 
+//  notification event
 model NotificationEvent {
   id         String   @id @default(uuid())
   created_at DateTime @default(now())
@@ -604,6 +605,9 @@ model Notification {
 
   entity_id String?
 }
+
+
+//=====================(Notification Settings)==========================
 
 enum NotificationSettingType {
   NEW_REQUEST_ALERT

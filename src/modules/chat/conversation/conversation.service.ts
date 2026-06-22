@@ -8,6 +8,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import appConfig from '../../../config/app.config';
 import { MessageGateway } from '../message/message.gateway';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+import { onlySendUserNotification } from 'src/common/repository/notification/utils/notification.utils';
 
 @Injectable()
 export class ConversationService {
@@ -104,6 +105,16 @@ export class ConversationService {
         },
       },
     });
+
+    
+    await onlySendUserNotification({
+      sender_id: sender,
+      receiver_id: participant_id,
+      text: 'New conversation created',
+      type: 'conversation_created',
+      entity_id: newConversation.id,
+    });
+
 
     const formattedParticipants = {
       conversation_id: newConversation.id,

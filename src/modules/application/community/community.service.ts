@@ -15,6 +15,7 @@ import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { CreateCommunityPostDto } from './dto/create-community.dto';
 import { CursorPaginationDto } from './dto/cursor-pagination.dto';
+import { sendAdminNotification, sendUserNotification } from 'src/common/repository/notification/utils/notification.utils';
 
 @Injectable()
 export class CommunityService {
@@ -283,6 +284,14 @@ export class CommunityService {
       user_reacted: null,
     };
 
+
+    await sendAdminNotification({
+      sender_id: userId,
+      text: 'New church post created.',
+      type: 'community',
+      entity_id: post.id,
+    });
+    
     return {
       success: true,
       message: 'Church post created successfully.',
@@ -763,7 +772,15 @@ export class CommunityService {
 
     const post = await this.prisma.churchPost.findUnique({
       where: { id: postId, deleted_at: null },
-      select: { church_id: true },
+      select: {
+        id: true,
+        church_id: true,
+        church_member: {
+          select: {
+            user_id: true,
+          },
+        },
+      },
     });
 
     if (!post) {
@@ -800,6 +817,16 @@ export class CommunityService {
         },
       },
     });
+
+    if (post.church_member?.user_id && post.church_member.user_id !== userId) {
+      await sendUserNotification({
+        sender_id: userId,
+        receiver_id: post.church_member.user_id,
+        text: 'New comment added to your post.',
+        type: 'community',
+        entity_id: post.id,
+      });
+    }
 
     const formattedComment = {
       id: newComment.id,
@@ -1008,6 +1035,9 @@ export class CommunityService {
         },
       },
     });
+
+
+
 
     const formattedReply = {
       id: reply.id,

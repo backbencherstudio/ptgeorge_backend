@@ -3,9 +3,10 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@ne
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { NotificationService } from './notification.service';
 import { Request } from 'express';
+import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 @ApiTags('Notification')
-@ApiBearerAuth()
+@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 @Controller('notification')
 @UseGuards(JwtAuthGuard) // Ensures that only authenticated users can access these endpoints
 export class NotificationController {

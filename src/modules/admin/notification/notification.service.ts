@@ -50,6 +50,40 @@ export class NotificationService {
 
   /*--------------------------------(utils part end)---------------------------------- */
 
+  // get all notification types
+  async getAllNotificationTypes(userId?: string) {
+    if (!userId) {
+      const types = NotificationService.ALL_NOTIFICATION_TYPES.map((type) => ({
+        type,
+        label: NotificationService.NOTIFICATION_META[type]?.label ?? type,
+        description:
+          NotificationService.NOTIFICATION_META[type]?.description ?? '',
+      }));
+
+      return { types };
+    }
+
+    const existingSettings = await this.prisma.userNotificationSetting.findMany(
+      {
+        where: { user_id: userId, is_enabled: true },
+        select: { type: true },
+      },
+    );
+
+    const enabledSet = new Set(existingSettings.map((s) => s.type));
+
+    const types = NotificationService.ALL_NOTIFICATION_TYPES.filter((t) =>
+      enabledSet.has(t),
+    ).map((type) => ({
+      type,
+      label: NotificationService.NOTIFICATION_META[type]?.label ?? type,
+      description:
+        NotificationService.NOTIFICATION_META[type]?.description ?? '',
+    }));
+
+    return { userId, types };
+  }
+
   //  get notification settings
   async getNotificationSettings(userId: string) {
     if (!userId) {

@@ -10,7 +10,7 @@ import { UpdateNotificationSettingDto } from './dto/update-notification.dto';
 import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 
-@ApiTags('Notification')
+@ApiTags('Notification-User')
 @ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin/notification')

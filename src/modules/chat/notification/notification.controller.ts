@@ -13,34 +13,34 @@ export class NotificationController {
 
   constructor(private readonly notificationService: NotificationService) {}
 
-  // Get all notifications for the authenticated user
-  @Get('user-notification')
-  @ApiOperation({ summary: 'Get all notifications for the authenticated user' })
-  @ApiResponse({
-    status: 200,
-    description: 'Notifications retrieved successfully',
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getAllUserNotifications(@Req() req: Request) {
-    const userId = req.user.userId; 
-    return this.notificationService.findAllNotificationsForUser(userId);
-  }
+  // // Get all notifications for the authenticated user
+  // @Get('user-notification')
+  // @ApiOperation({ summary: 'Get all notifications for the authenticated user' })
+  // @ApiResponse({
+  //   status: 200,
+  //   description: 'Notifications retrieved successfully',
+  // })
+  // @ApiResponse({ status: 401, description: 'Unauthorized' })
+  // async getAllUserNotifications(@Req() req: Request) {
+  //   const userId = req.user.userId; 
+  //   return this.notificationService.findAllNotificationsForUser(userId);
+  // }
 
-  // delete notification by id for the authenticated user
-  @Patch('delete-notification/:id')
-  @ApiOperation({ summary: 'Soft-delete a notification by ID' })
-  @ApiParam({ name: 'id', description: 'Notification ID to delete' })
-  @ApiResponse({
-    status: 200,
-    description: 'Notification deleted successfully',
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async deleteUserNotification(
-    @Req() req: Request, 
-    @Param('id') id: string) {
-    const userId = req.user.userId; 
-    return this.notificationService.deleteNotificationForUser(id, userId);
-  }
+  // // delete notification by id for the authenticated user
+  // @Patch('delete-notification/:id')
+  // @ApiOperation({ summary: 'Soft-delete a notification by ID' })
+  // @ApiParam({ name: 'id', description: 'Notification ID to delete' })
+  // @ApiResponse({
+  //   status: 200,
+  //   description: 'Notification deleted successfully',
+  // })
+  // @ApiResponse({ status: 401, description: 'Unauthorized' })
+  // async deleteUserNotification(
+  //   @Req() req: Request, 
+  //   @Param('id') id: string) {
+  //   const userId = req.user.userId; 
+  //   return this.notificationService.deleteNotificationForUser(id, userId);
+  // }
 }
 
 

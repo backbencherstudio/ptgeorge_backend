@@ -52,15 +52,21 @@ export class NotificationService {
 
   // get all notification types
   async getAllNotificationTypes(userId?: string) {
-    if (!userId) {
-      const types = NotificationService.ALL_NOTIFICATION_TYPES.map((type) => ({
-        type,
-        label: NotificationService.NOTIFICATION_META[type]?.label ?? type,
-        description:
-          NotificationService.NOTIFICATION_META[type]?.description ?? '',
-      }));
+    const types = NotificationService.ALL_NOTIFICATION_TYPES.map((type, idx) => ({
+      id: String(idx + 1),
+      type,
+      label: NotificationService.NOTIFICATION_META[type]?.label ?? type,
+      description:
+        NotificationService.NOTIFICATION_META[type]?.description ?? '',
+    }));
 
-      return { types };
+    if (!userId) {
+      return {
+        message: 'Successfully retrieved all notification types',
+        data: {
+          types,
+        },
+      };
     }
 
     const existingSettings = await this.prisma.userNotificationSetting.findMany(
@@ -72,16 +78,15 @@ export class NotificationService {
 
     const enabledSet = new Set(existingSettings.map((s) => s.type));
 
-    const types = NotificationService.ALL_NOTIFICATION_TYPES.filter((t) =>
-      enabledSet.has(t),
-    ).map((type) => ({
-      type,
-      label: NotificationService.NOTIFICATION_META[type]?.label ?? type,
-      description:
-        NotificationService.NOTIFICATION_META[type]?.description ?? '',
-    }));
+    const filteredTypes = types.filter((t) => enabledSet.has(t.type));
 
-    return { userId, types };
+    return {
+      message: `Successfully retrieved enabled notification types for user ${userId}`,
+      data: {
+        userId,
+        types: filteredTypes,
+      },
+    };
   }
 
   //  get notification settings

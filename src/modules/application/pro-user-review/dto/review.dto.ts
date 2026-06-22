@@ -6,7 +6,6 @@ import {
   IsArray,
   Min,
   Max,
-  IsUUID,
 } from 'class-validator';
 
 export class CreateReviewDto {
@@ -53,6 +52,6 @@ export class CreateReviewReplyDto {
 
 export class FollowDto {
   @ApiProperty({ example: 'user_id_to_follow' })
-  @IsUUID()
+  @IsString()
   following_id: string;
 }

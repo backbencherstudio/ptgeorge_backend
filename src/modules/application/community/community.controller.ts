@@ -87,6 +87,7 @@ export class CommunityController {
             'Post images (up to 10 files, max 5MB each). Supports JPEG, PNG, JPG, WEBP, GIF',
         },
       },
+    
     },
   })
   async createPost(

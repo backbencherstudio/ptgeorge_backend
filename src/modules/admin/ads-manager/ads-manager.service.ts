@@ -1,12 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { CreateAdDto } from './dto/create-ad.dto';
 import { UpdateAdDto } from './dto/update-ad.dto';
 import { AdQueryDto } from './dto/ad-query.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { ConfigService } from '@nestjs/config';
-import { AdStatus, Prisma } from 'prisma/generated/browser';
+import { AdPlacement, AdStatus, Prisma } from 'prisma/generated/browser';
 import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
+import { CursorPaginationDto } from './dto/cursor-pagination.dto';
 
 @Injectable()
 export class AdsService {
@@ -337,6 +338,203 @@ export class AdsService {
         },
       };
     } catch (error) {
+      return {
+        success: false,
+        statusCode: 500,
+        message: 'Failed to retrieve ads',
+        error: error.message,
+      };
+    }
+  }
+
+  async findPublicAds(cursorPaginationDto: CursorPaginationDto) {
+    try {
+      const {
+        limit = 10,
+        cursor,
+        order = 'desc',
+        placement,
+        country,
+        city,
+      } = cursorPaginationDto;
+
+      const pageSize = Math.min(Math.max(Number(limit) || 10, 1), 50);
+
+      const sortOrder: Prisma.SortOrder = order === 'asc' ? 'asc' : 'desc';
+
+      const where: Prisma.AdWhereInput = {
+        deleted_at: null,
+        status: AdStatus.ACTIVE,
+      };
+
+      if (placement) {
+        where.placement = placement as AdPlacement;
+      }
+
+      if (country) {
+        where.country = country;
+      }
+
+      if (city) {
+        where.city = city;
+      }
+
+      let cursorCondition: Prisma.AdWhereInput = {};
+
+      if (cursor) {
+        const cursorAd = await this.prisma.ad.findUnique({
+          where: {
+            id: cursor,
+          },
+          select: {
+            id: true,
+            created_at: true,
+          },
+        });
+
+        if (!cursorAd) {
+          return {
+            success: false,
+            statusCode: 400,
+            message: 'Invalid cursor',
+          };
+        }
+
+        cursorCondition =
+          sortOrder === 'desc'
+            ? {
+                OR: [
+                  {
+                    created_at: {
+                      lt: cursorAd.created_at,
+                    },
+                  },
+                  {
+                    AND: [
+                      {
+                        created_at: cursorAd.created_at,
+                      },
+                      {
+                        id: {
+                          lt: cursorAd.id,
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }
+            : {
+                OR: [
+                  {
+                    created_at: {
+                      gt: cursorAd.created_at,
+                    },
+                  },
+                  {
+                    AND: [
+                      {
+                        created_at: cursorAd.created_at,
+                      },
+                      {
+                        id: {
+                          gt: cursorAd.id,
+                        },
+                      },
+                    ],
+                  },
+                ],
+              };
+      }
+
+      const ads = await this.prisma.ad.findMany({
+        where: {
+          AND: [where, cursorCondition],
+        },
+
+        orderBy: [
+          {
+            created_at: sortOrder,
+          },
+          {
+            id: sortOrder,
+          },
+        ],
+
+        take: pageSize + 1,
+
+        include: {
+          created_by: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      const hasMore = ads.length > pageSize;
+
+      const items = hasMore ? ads.slice(0, pageSize) : ads;
+
+      const formattedAds = items.map((ad) => ({
+        id: ad.id,
+        title: ad.title,
+        description: ad.description,
+        link: ad.link,
+        thumbnail_url: this.getFullUrl(ad.thumbnail),
+
+        status: ad.status,
+        placement: ad.placement,
+
+        country: ad.country,
+        city: ad.city,
+
+        location_display: this.formatLocationDisplay(ad.country, ad.city),
+
+        start_date: ad.start_date,
+        end_date: ad.end_date,
+
+        total_views: ad.total_views,
+        total_clicks: ad.total_clicks,
+
+        created_at: ad.created_at,
+
+        created_by: ad.created_by,
+
+        metrics: {
+          views: ad.total_views,
+          clicks: ad.total_clicks,
+          ctr:
+            ad.total_views > 0
+              ? Number(((ad.total_clicks / ad.total_views) * 100).toFixed(2))
+              : 0,
+        },
+      }));
+
+      const nextCursor =
+        hasMore && items.length ? items[items.length - 1].id : null;
+
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Ads retrieved successfully',
+        data: {
+          items: formattedAds,
+          meta: {
+            limit: pageSize,
+            next_cursor: nextCursor,
+            has_more: hasMore,
+          },
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error fetching public ads: ${error.message}`,
+        error.stack,
+      );
+
       return {
         success: false,
         statusCode: 500,

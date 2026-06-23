@@ -11,7 +11,7 @@ import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 
 @ApiTags('Notification-User')
-@ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
+@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('admin/notification')
 export class NotificationController {

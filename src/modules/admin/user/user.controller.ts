@@ -42,7 +42,7 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Post()
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.CHURCH_ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: '[ADMIN] Create a user',

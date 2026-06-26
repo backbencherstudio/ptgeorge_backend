@@ -15,7 +15,10 @@ import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { CreateCommunityPostDto } from './dto/create-community.dto';
 import { CursorPaginationDto } from './dto/cursor-pagination.dto';
-import { sendAdminNotification, sendUserNotification } from 'src/common/repository/notification/utils/notification.utils';
+import {
+  sendAdminNotification,
+  sendUserNotification,
+} from 'src/common/repository/notification/utils/notification.utils';
 
 @Injectable()
 export class CommunityService {
@@ -23,6 +26,47 @@ export class CommunityService {
     private prisma: PrismaService,
     private communityUtils: CommunityUtils,
   ) {}
+
+  async getDashboardStats() {
+    // Get total active professionals in church communities (PRO_USER with ACTIVE status)
+    const totalActiveProfessionals = await this.prisma.user.count({
+      where: {
+        type: 'PRO_USER',
+        status: 'ACTIVE',
+        deleted_at: null,
+      },
+    });
+
+    // Get total church members in the network
+    const totalChurchMembers = await this.prisma.user.count({
+      where: {
+        status: 'ACTIVE',
+        deleted_at: null,
+        OR: [{ type: 'USER' }, { type: 'PRO_USER' }, { type: 'CHURCH_ADMIN' }],
+      },
+    });
+
+    // Get growing network of churches active in the last month
+    const lastMonth = new Date();
+    lastMonth.setMonth(lastMonth.getMonth() - 1);
+
+    const growingChurchMembers = await this.prisma.user.count({
+      where: {
+        status: 'ACTIVE',
+        deleted_at: null,
+        created_at: {
+          gte: lastMonth,
+        },
+        OR: [{ type: 'USER' }, { type: 'PRO_USER' }, { type: 'CHURCH_ADMIN' }],
+      },
+    });
+
+    return {
+      totalActiveProfessionals,
+      totalChurchMembers,
+      growingChurchMembers,
+    };
+  }
 
   /* -----------------------------------
      Helper Methods
@@ -284,14 +328,13 @@ export class CommunityService {
       user_reacted: null,
     };
 
-
     await sendAdminNotification({
       sender_id: userId,
       text: 'New church post created.',
       type: 'community',
       entity_id: post.id,
     });
-    
+
     return {
       success: true,
       message: 'Church post created successfully.',
@@ -299,10 +342,7 @@ export class CommunityService {
     };
   }
 
-  async findAllPosts(
-    userId: string, 
-    cursorPaginationDto: CursorPaginationDto
-  ) {
+  async findAllPosts(userId: string, cursorPaginationDto: CursorPaginationDto) {
     const { limit = 10, cursor, order = 'desc' } = cursorPaginationDto;
     const churchId = await this.getUserChurchId(userId);
 
@@ -511,10 +551,7 @@ export class CommunityService {
     };
   }
 
-  async getPostById(
-    postId: string, 
-    userId: string
-  ) {
+  async getPostById(postId: string, userId: string) {
     const post = await this.prisma.churchPost.findUnique({
       where: { id: postId, deleted_at: null },
       include: {
@@ -679,10 +716,7 @@ export class CommunityService {
     };
   }
 
-  async removePost(
-    postId: string, 
-    userId: string
-  ) {
+  async removePost(postId: string, userId: string) {
     const post = await this.prisma.churchPost.findUnique({
       where: { id: postId },
       select: {
@@ -1036,9 +1070,6 @@ export class CommunityService {
       },
     });
 
-
-
-
     const formattedReply = {
       id: reply.id,
       content: reply.content,
@@ -1059,9 +1090,7 @@ export class CommunityService {
     };
   }
 
-  async deleteReplyToComment(
-    replyId: string, 
-    userId: string) {
+  async deleteReplyToComment(replyId: string, userId: string) {
     const reply = await this.prisma.churchCommentReply.findUnique({
       where: { id: replyId },
       include: {
@@ -1103,11 +1132,7 @@ export class CommunityService {
      REACT (ChurchPostReact)
   ----------------------------------- */
 
-  async reactToPost(
-    postId: string, 
-    dto: ReactPostDto, 
-    userId: string
-  ) {
+  async reactToPost(postId: string, dto: ReactPostDto, userId: string) {
     const { react_type } = dto;
 
     const post = await this.prisma.churchPost.findUnique({
@@ -1149,7 +1174,4 @@ export class CommunityService {
       data: newReact,
     };
   }
-
-
-
 }

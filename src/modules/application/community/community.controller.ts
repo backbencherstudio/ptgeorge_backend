@@ -20,7 +20,10 @@ import { Request } from 'express';
 import { PaginationDto } from 'src/common/pagination/dto/offset-pagination.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { ReactPostDto } from './dto/create-react.dto';
-import { FileFieldsInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import {
+  FileFieldsInterceptor,
+  FilesInterceptor,
+} from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import {
   ApiTags,
@@ -35,6 +38,7 @@ import {
 import { CreateCommunityPostDto } from './dto/create-community.dto';
 import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 import { CursorPaginationDto } from './dto/cursor-pagination.dto';
+import { Public } from 'src/common/guard/role/public.decorator';
 
 @ApiTags('Church Community')
 @ApiBearerAuth(SWAGGER_AUTH.CHURCH_MEMBER)
@@ -50,9 +54,20 @@ import { CursorPaginationDto } from './dto/cursor-pagination.dto';
 export class CommunityController {
   constructor(private readonly communityService: CommunityService) {}
 
+  @Get('stats')
+  @Public()
+  @ApiOperation({ summary: 'Get dashboard statistics' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns dashboard statistics',
+  })
+  async getDashboardStats(@Req() req: any) {
+    return this.communityService.getDashboardStats();
+  }
+
   // -------------------- POSTS --------------------
- 
-  //  
+
+  //
   @Post('post')
   @UseInterceptors(
     FileFieldsInterceptor([{ name: 'images', maxCount: 10 }], {
@@ -87,7 +102,6 @@ export class CommunityController {
             'Post images (up to 10 files, max 5MB each). Supports JPEG, PNG, JPG, WEBP, GIF',
         },
       },
-    
     },
   })
   async createPost(
@@ -207,7 +221,7 @@ export class CommunityController {
 
   // -------------------- COMMENTS --------------------
 
-  // Add comment 
+  // Add comment
   @Post('post/:postId/comment')
   @UseInterceptors(
     FileFieldsInterceptor([{ name: 'images', maxCount: 5 }], {
@@ -267,7 +281,6 @@ export class CommunityController {
     );
   }
 
-
   @Get('post/:postId/comments')
   @ApiOperation({
     summary: 'Get all comments for a post',
@@ -288,9 +301,12 @@ export class CommunityController {
     @Query() paginationDto: PaginationDto,
   ) {
     const userId = req.user.userId;
-    return this.communityService.getCommentsForPost(postId, userId, paginationDto);
+    return this.communityService.getCommentsForPost(
+      postId,
+      userId,
+      paginationDto,
+    );
   }
-
 
   @Delete('comment/:commentId')
   @ApiOperation({

@@ -42,7 +42,7 @@ import { CursorPaginationDto } from './dto/cursor-pagination.dto';
 import { Public } from 'src/common/guard/role/public.decorator';
 
 @ApiTags('Ads Manager')
-@ApiBearerAuth(SWAGGER_AUTH.CHURCH_MEMBER)
+@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 @Controller('ads')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.SUPER_ADMIN)

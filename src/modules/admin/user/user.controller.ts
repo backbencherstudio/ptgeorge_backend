@@ -35,7 +35,7 @@ import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 
 @ApiBearerAuth()
 @ApiTags('User')
-@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
+@ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('/user')
 export class UserController {

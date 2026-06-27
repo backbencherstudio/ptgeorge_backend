@@ -28,8 +28,14 @@ async function hashPassword(password: string): Promise<string> {
 const rolesData = [
   {
     title: 'Admin',
-    name: Role.ADMIN, // Add this
+    name: Role.ADMIN,
     description: 'System administrator with full platform access',
+    color: '#FF6B6B',
+  },
+  {
+    title: 'Church Admin', // ADDED: Church Admin role
+    name: Role.CHURCH_ADMIN,
+    description: 'Church administrator with full church management rights',
     color: '#FF6B6B',
   },
   {
@@ -108,6 +114,13 @@ const permissionsData = [
     description: 'Full control over church members',
   },
   {
+    title: 'Read Member Information',
+    name: 'Member',
+    action: 'read',
+    category: 'Member',
+    description: 'Can read member information',
+  },
+  {
     title: 'Add Church Members',
     name: 'add_church_members',
     action: 'create',
@@ -176,6 +189,7 @@ const permissionsData = [
 const rolePermissionsMap: Record<string, string[]> = {
   [Role.ADMIN]: [
     'assign_role',
+    'Member',
     'manage_role_assignments',
     'view_role_assignments',
     'view_church_members',
@@ -190,8 +204,27 @@ const rolePermissionsMap: Record<string, string[]> = {
     'publish_content',
     'view_content',
   ],
+  [Role.CHURCH_ADMIN]: [
+    // ADDED: CHURCH_ADMIN permissions
+    'assign_role',
+    'manage_role_assignments',
+    'view_role_assignments',
+    'view_church_members',
+    'Member', // This is the key permission for @RequirePermission('read', 'Member')
+    'manage_church_members',
+    'add_church_members',
+    'edit_church_members',
+    'delete_church_members',
+    'manage_church_settings',
+    'view_church_settings',
+    'update_church_settings',
+    'manage_content',
+    'publish_content',
+    'view_content',
+  ],
   [Role.CHURCH_LEADER]: [
     'assign_role',
+    'Member',
     'view_role_assignments',
     'view_church_members',
     'add_church_members',
@@ -203,6 +236,7 @@ const rolePermissionsMap: Record<string, string[]> = {
     'assign_role',
     'view_role_assignments',
     'view_church_members',
+    'Member',
     'add_church_members',
     'edit_church_members',
     'view_church_settings',
@@ -211,6 +245,7 @@ const rolePermissionsMap: Record<string, string[]> = {
   ],
   [Role.ASSISTANT_PASTOR]: [
     'assign_role',
+    'Member',
     'view_role_assignments',
     'view_church_members',
     'add_church_members',
@@ -219,10 +254,11 @@ const rolePermissionsMap: Record<string, string[]> = {
   [Role.BACKGROUND_CHECKER]: [
     'assign_role',
     'view_role_assignments',
+    'Member',
     'view_church_members',
   ],
-  [Role.HELPER]: ['view_church_members', 'view_content'],
-  [Role.CHURCH_MEMBER]: ['view_content'],
+  [Role.HELPER]: ['view_church_members', 'view_content', 'Member'],
+  [Role.CHURCH_MEMBER]: ['view_content', 'Member'],
 };
 
 // Define role assignment rules (only for assignable roles)
@@ -440,7 +476,9 @@ async function main() {
       last_name: 'Admin',
       username: appConfig().defaultUser?.system?.username || 'admin',
       email: appConfig().defaultUser?.system?.email || 'admin@ptgeorge.com',
-      password: await hashPassword(appConfig().defaultUser?.system?.password || 'Password@123'),
+      password: await hashPassword(
+        appConfig().defaultUser?.system?.password || 'Password@123',
+      ),
       phone_number: '+1234567890',
       church_name: 'System Administration',
       language: 'en',
@@ -793,6 +831,67 @@ async function main() {
       createdChurches.set(churchData.name, church);
     }
 
+    // Step 7.5: Assign CHURCH_ADMIN role to church admin users (FIX)
+    console.log(
+      '\n📝 Step 7.5: Assigning CHURCH_ADMIN role to church admins...',
+    );
+
+    const churchAdminRole = createdRoles.get(Role.CHURCH_ADMIN);
+    if (churchAdminRole) {
+      // Get all church admin users
+      const churchAdminUsers = await prisma.user.findMany({
+        where: {
+          type: UserType.CHURCH_ADMIN,
+          email: {
+            in: ['admin@gracechurch.org', 'admin@faithassembly.org'],
+          },
+        },
+      });
+
+      for (const adminUser of churchAdminUsers) {
+        // Get their church membership
+        const membership = await prisma.churchMember.findFirst({
+          where: {
+            user_id: adminUser.id,
+            status: ChurchMemberStatus.ACTIVE,
+          },
+        });
+
+        if (!membership) {
+          console.log(`⚠️ No active membership found for ${adminUser.email}`);
+          continue;
+        }
+
+        // Check if role is already assigned
+        const existingAssignment = await prisma.roleUser.findUnique({
+          where: {
+            role_id_user_id: {
+              role_id: churchAdminRole.id,
+              user_id: adminUser.id,
+            },
+          },
+        });
+
+        if (!existingAssignment) {
+          await prisma.roleUser.create({
+            data: {
+              role_id: churchAdminRole.id,
+              user_id: adminUser.id,
+              assigned_by_id: superadmin.id,
+              churchId: membership.church_id,
+            },
+          });
+          console.log(`✅ Assigned CHURCH_ADMIN role to ${adminUser.email}`);
+        } else {
+          console.log(
+            `✅ CHURCH_ADMIN role already assigned to ${adminUser.email}`,
+          );
+        }
+      }
+    } else {
+      console.log('⚠️ CHURCH_ADMIN role not found, skipping assignment');
+    }
+
     // Step 8: Create Additional Church Users (with UserType.USER or UserType.PRO_USER)
     console.log('\n📝 Step 8: Creating additional church users...');
 
@@ -871,7 +970,6 @@ async function main() {
           user_type: UserType.USER,
           church_role: 'Regular User',
         },
-        // Additional PRO users for Grace Church
         {
           first_name: 'Sarah',
           last_name: 'Johnson',
@@ -921,7 +1019,6 @@ async function main() {
           user_type: UserType.USER,
           church_role: 'Member',
         },
-        // Add PRO users for Faith Church
         {
           first_name: 'Robert',
           last_name: 'Taylor',
@@ -968,7 +1065,6 @@ async function main() {
             email_verified_at: new Date(),
           };
 
-          // Add professional fields for PRO_USER type with different professions
           if (userData.user_type === UserType.PRO_USER) {
             let profession = 'Home Care Specialist';
             let category = 'Home Services';
@@ -1015,7 +1111,6 @@ async function main() {
           );
         }
 
-        // Create church membership
         const existingMembership = await prisma.churchMember.findFirst({
           where: {
             church_id: church.id,
@@ -1045,7 +1140,6 @@ async function main() {
 
         createdChurchMembers.get(churchName).set(user.id, churchMember);
 
-        // Assign assignable role only if provided
         if (userData.assignable_role) {
           const role = createdRoles.get(userData.assignable_role);
           if (role) {
@@ -1087,7 +1181,6 @@ async function main() {
     // Step 9: Create Follow relationships
     console.log('\n📝 Step 9: Creating follow relationships...');
 
-    // Get all users from Grace Church
     const graceChurch = createdChurches.get('Grace Community Church');
     const faithChurch = createdChurches.get('Faith Assembly Church');
 
@@ -1109,7 +1202,6 @@ async function main() {
       (u) => u.type === UserType.USER,
     );
 
-    // Create follows - Regular users follow PRO users
     for (const regularUser of graceRegularUsers) {
       for (const proUser of graceProUsers) {
         const existingFollow = await prisma.userFollow.findUnique({
@@ -1240,7 +1332,6 @@ async function main() {
             `  ✅ Review created: ${reviewer.first_name} → ${proUser.first_name} (${reviewData.rating} stars)`,
           );
 
-          // Add helpful votes to reviews
           if (reviewData.rating === 5) {
             const helpfulVoters = await prisma.user.findMany({
               where: {
@@ -1302,7 +1393,6 @@ async function main() {
       const memberIds = Array.from(churchMembersMap.keys());
       console.log(`\n  📝 Creating content for ${churchName}:`);
 
-      // Create posts
       for (let i = 0; i < churchPostsData.length; i++) {
         const postData = churchPostsData[i];
         const randomMemberId =
@@ -1333,7 +1423,6 @@ async function main() {
             `    ✅ Post created: ${postData.content.substring(0, 50)}...`,
           );
 
-          // Add comments to each post
           for (let j = 0; j < Math.min(3, churchCommentsData.length); j++) {
             const commentData = churchCommentsData[j];
             const randomCommenterId =
@@ -1355,7 +1444,6 @@ async function main() {
               `      ✅ Comment added: "${commentData.content.substring(0, 30)}..."`,
             );
 
-            // Add replies to some comments
             if (j < commentRepliesData.length) {
               const replyData = commentRepliesData[j];
               const randomReplierId =
@@ -1377,7 +1465,6 @@ async function main() {
             }
           }
 
-          // Add reacts to posts
           const uniqueReactMembers = new Set();
           const numberOfReacts = Math.min(5, memberIds.length);
 
@@ -1804,7 +1891,9 @@ async function main() {
     console.log(`  ✅ Created ${auditLogsCreated} audit log records`);
 
     // Step 17: Create Notification Settings and Notifications
-    console.log('\n📝 Step 17: Creating user notification settings and notifications...');
+    console.log(
+      '\n📝 Step 17: Creating user notification settings and notifications...',
+    );
 
     const allUsers = await prisma.user.findMany();
     const notificationTypes = [
@@ -1818,17 +1907,18 @@ async function main() {
     let notificationSettingsCreated = 0;
     let notificationsCreated = 0;
 
-    // Create notification settings for each user
     for (const user of allUsers) {
       for (const type of notificationTypes) {
-        const existingSetting = await prisma.userNotificationSetting.findUnique({
-          where: {
-            user_id_type: {
-              user_id: user.id,
-              type: type as any,
+        const existingSetting = await prisma.userNotificationSetting.findUnique(
+          {
+            where: {
+              user_id_type: {
+                user_id: user.id,
+                type: type as any,
+              },
             },
           },
-        });
+        );
 
         if (!existingSetting) {
           await prisma.userNotificationSetting.create({
@@ -1843,9 +1933,10 @@ async function main() {
         }
       }
     }
-    console.log(`  ✅ Created ${notificationSettingsCreated} notification settings`);
+    console.log(
+      `  ✅ Created ${notificationSettingsCreated} notification settings`,
+    );
 
-    // Create sample notifications for users
     const notificationMessages: Record<string, { type: string; text: string }> =
       {
         NEW_REQUEST_ALERT: {
@@ -1871,15 +1962,15 @@ async function main() {
       };
 
     for (const user of allUsers) {
-      // Create 3-5 notifications for each user (mix of read and unread)
       const notificationCount = Math.floor(Math.random() * 3) + 3;
 
       for (let i = 0; i < notificationCount; i++) {
         const randomType =
-          notificationTypes[Math.floor(Math.random() * notificationTypes.length)];
+          notificationTypes[
+            Math.floor(Math.random() * notificationTypes.length)
+          ];
         const msg = notificationMessages[randomType];
 
-        // Create notification event if needed
         let notificationEvent = await prisma.notificationEvent.findFirst({
           where: { type: msg.type },
         });
@@ -1895,9 +1986,8 @@ async function main() {
           });
         }
 
-        // Create notification (some read, some unread)
-        const isRead = Math.random() > 0.3; // 70% read, 30% unread
-        const daysAgo = Math.floor(Math.random() * 30) + 1; // 1-30 days ago
+        const isRead = Math.random() > 0.3;
+        const daysAgo = Math.floor(Math.random() * 30) + 1;
         const createdDate = new Date();
         createdDate.setDate(createdDate.getDate() - daysAgo);
 
@@ -1910,10 +2000,9 @@ async function main() {
         };
 
         if (isRead) {
-          notificationData.read_at = new Date(createdDate.getTime() + 3600000); // Read 1 hour later
+          notificationData.read_at = new Date(createdDate.getTime() + 3600000);
         }
 
-        // Check if similar notification already exists for this user
         const existingNotif = await prisma.notification.findFirst({
           where: {
             receiver_id: user.id,
@@ -1990,7 +2079,8 @@ async function main() {
     const totalAuditLogs = await prisma.auditLog.count();
     console.log(`✅ Total audit logs: ${totalAuditLogs}`);
 
-    const totalNotificationSettings = await prisma.userNotificationSetting.count();
+    const totalNotificationSettings =
+      await prisma.userNotificationSetting.count();
     console.log(`✅ Notification settings: ${totalNotificationSettings}`);
 
     const totalNotifications = await prisma.notification.count();

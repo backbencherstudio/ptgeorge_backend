@@ -38,6 +38,8 @@ import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guard/role/roles.guard';
 import { Roles } from 'src/common/guard/role/roles.decorator';
 import { Role } from 'src/common/guard/role/role.enum';
+import { CursorPaginationDto } from './dto/cursor-pagination.dto';
+import { Public } from 'src/common/guard/role/public.decorator';
 
 @ApiTags('Ads Manager')
 @ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
@@ -209,6 +211,56 @@ export class AdsController {
     const isAdmin =
       req.user?.type === 'SUPER_ADMIN' || req.user?.type === 'ADMIN';
     return this.adsService.findAll(query, userId, isAdmin);
+  }
+
+  @Get('public')
+  @Public()
+  @ApiOperation({
+    summary: 'Get active ads with cursor pagination for feed',
+    description:
+      'Public endpoint to retrieve active ads with cursor-based pagination for displaying in feed',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Number of items per page (default: 10, max: 50)',
+  })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    type: String,
+    description:
+      'Cursor (ad ID) for pagination. Pass the last ad ID from previous page',
+  })
+  @ApiQuery({
+    name: 'order',
+    required: false,
+    enum: ['asc', 'desc'],
+    example: 'desc',
+    description: 'Order direction (default: desc)',
+  })
+  @ApiQuery({
+    name: 'placement',
+    required: false,
+    enum: AdPlacement,
+    description: 'Filter by placement',
+  })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    type: String,
+    description: 'Filter by country',
+  })
+  @ApiQuery({
+    name: 'city',
+    required: false,
+    type: String,
+    description: 'Filter by city',
+  })
+  async getPublicAds(@Query() cursorPaginationDto: CursorPaginationDto) {
+    return this.adsService.findPublicAds(cursorPaginationDto);
   }
 
   @Get('dashboard/analytics')

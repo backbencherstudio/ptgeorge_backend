@@ -1,12 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { CreateAdDto } from './dto/create-ad.dto';
 import { UpdateAdDto } from './dto/update-ad.dto';
 import { AdQueryDto } from './dto/ad-query.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import { ConfigService } from '@nestjs/config';
-import { AdStatus, Prisma } from 'prisma/generated/browser';
+import { AdPlacement, AdStatus, Prisma } from 'prisma/generated/browser';
 import { AuditLogService } from 'src/modules/application/audit-log/audit-log.service';
+import { CursorPaginationDto } from './dto/cursor-pagination.dto';
 
 @Injectable()
 export class AdsService {
@@ -337,6 +338,219 @@ export class AdsService {
         },
       };
     } catch (error) {
+      return {
+        success: false,
+        statusCode: 500,
+        message: 'Failed to retrieve ads',
+        error: error.message,
+      };
+    }
+  }
+
+  async findPublicAds(cursorPaginationDto: CursorPaginationDto) {
+    try {
+      const {
+        limit = 10,
+        cursor,
+        order = 'desc',
+        placement,
+        country,
+        city,
+      } = cursorPaginationDto;
+
+      // Validate and sanitize limit
+      const pageSize = Math.min(Math.max(Number(limit) || 10, 1), 50);
+
+      // Validate and set sort order
+      const sortOrder: Prisma.SortOrder = order === 'asc' ? 'asc' : 'desc';
+
+      // Build base where clause
+      const where: Prisma.AdWhereInput = {
+        deleted_at: null,
+        status: AdStatus.ACTIVE,
+        ...(placement && { placement: placement as AdPlacement }),
+        ...(country && { country }),
+        ...(city && { city }),
+      };
+
+      // Build cursor condition
+      let cursorCondition: Prisma.AdWhereInput = {};
+
+      if (cursor) {
+        const cursorAd = await this.prisma.ad.findUnique({
+          where: { id: cursor },
+          select: {
+            id: true,
+            created_at: true,
+          },
+        });
+
+        if (!cursorAd) {
+          return {
+            success: false,
+            statusCode: 400,
+            message: 'Invalid cursor: Ad not found',
+          };
+        }
+
+        // Build cursor-based pagination condition
+        if (sortOrder === 'desc') {
+          cursorCondition = {
+            OR: [
+              {
+                created_at: {
+                  lt: cursorAd.created_at,
+                },
+              },
+              {
+                AND: [
+                  {
+                    created_at: cursorAd.created_at,
+                  },
+                  {
+                    id: {
+                      lt: cursorAd.id,
+                    },
+                  },
+                ],
+              },
+            ],
+          };
+        } else {
+          cursorCondition = {
+            OR: [
+              {
+                created_at: {
+                  gt: cursorAd.created_at,
+                },
+              },
+              {
+                AND: [
+                  {
+                    created_at: cursorAd.created_at,
+                  },
+                  {
+                    id: {
+                      gt: cursorAd.id,
+                    },
+                  },
+                ],
+              },
+            ],
+          };
+        }
+      }
+
+      // Combine where clauses
+      const finalWhere = cursor
+        ? {
+            AND: [where, cursorCondition],
+          }
+        : where;
+
+      // Log query for debugging
+      this.logger.debug(`Fetching ads with query:`, {
+        where: finalWhere,
+        orderBy: [{ created_at: sortOrder }, { id: sortOrder }],
+        take: pageSize + 1,
+      });
+
+      // Execute query — fetch page items + total matching count in parallel
+      const [ads, totalMatching] = await Promise.all([
+        this.prisma.ad.findMany({
+          where: finalWhere,
+          orderBy: [
+            {
+              created_at: sortOrder,
+            },
+            {
+              id: sortOrder,
+            },
+          ],
+          take: pageSize + 1,
+          include: {
+            created_by: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                email: true,
+              },
+            },
+          },
+        }),
+
+        // total count matching the BASE filters (status/placement/country/city),
+        // ignoring the cursor — this tells you how many ads exist across ALL pages
+        this.prisma.ad.count({ where }),
+      ]);
+
+      // Log results
+      this.logger.debug(
+        `Found ${ads.length} ads (including extra for hasMore check). Total matching base filters: ${totalMatching}`,
+      );
+
+      // Determine if there are more items
+      const hasMore = ads.length > pageSize;
+
+      // Slice to the actual page size
+      const items = hasMore ? ads.slice(0, pageSize) : ads;
+
+      this.logger.debug(`Returning ${items.length} ads, hasMore: ${hasMore}`);
+
+      // Format response
+      const formattedAds = items.map((ad) => ({
+        id: ad.id,
+        title: ad.title,
+        description: ad.description,
+        link: ad.link,
+        thumbnail_url: this.getFullUrl(ad.thumbnail),
+        status: ad.status,
+        placement: ad.placement,
+        country: ad.country,
+        city: ad.city,
+        location_display: this.formatLocationDisplay(ad.country, ad.city),
+        start_date: ad.start_date,
+        end_date: ad.end_date,
+        total_views: ad.total_views,
+        total_clicks: ad.total_clicks,
+        created_at: ad.created_at,
+        created_by: ad.created_by,
+        metrics: {
+          views: ad.total_views,
+          clicks: ad.total_clicks,
+          ctr:
+            ad.total_views > 0
+              ? Number(((ad.total_clicks / ad.total_views) * 100).toFixed(2))
+              : 0,
+        },
+      }));
+
+      // Determine next cursor
+      const nextCursor =
+        hasMore && items.length > 0 ? items[items.length - 1].id : null;
+
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Ads retrieved successfully',
+        data: {
+          items: formattedAds,
+          meta: {
+            limit: pageSize,
+            next_cursor: nextCursor,
+            has_more: hasMore,
+            total_returned: items.length,
+            total_matching: totalMatching,
+          },
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error fetching public ads: ${error.message}`,
+        error.stack,
+      );
+
       return {
         success: false,
         statusCode: 500,

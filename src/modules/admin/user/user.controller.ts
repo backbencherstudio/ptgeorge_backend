@@ -35,14 +35,14 @@ import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 
 @ApiBearerAuth()
 @ApiTags('User')
-@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
+@ApiBearerAuth(SWAGGER_AUTH.CHURCH_ADMIN)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('/user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Post()
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.CHURCH_ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: '[ADMIN] Create a user',

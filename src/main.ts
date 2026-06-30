@@ -16,7 +16,7 @@ import {
   swaggerUiOptions,
 } from './common/swagger/swagger-auth';
 import { NextFunction, Request, Response } from 'express';
-import { helmetConfig } from './common/config/helmet.cofig';
+import { helmetConfig, rateLimiterConfig } from './common/config/helmet.cofig';
 import initializeFirebase from './config/firebase.config';
 
 async function bootstrap() {
@@ -34,6 +34,7 @@ async function bootstrap() {
     credentials: true,
   });
   app.use(helmetConfig());
+  app.use(rateLimiterConfig());
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const url = req.originalUrl || req.url;

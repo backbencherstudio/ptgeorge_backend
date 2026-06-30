@@ -88,6 +88,7 @@ model User {
 
   business_portfolio String? @db.Text
   description        String? @db.Text
+  other_locations    String? @db.Text
 
   // fcm token for push notifications 
   fcm_token String?

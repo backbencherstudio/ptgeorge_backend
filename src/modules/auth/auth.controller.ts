@@ -22,6 +22,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiPropertyOptional,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -41,6 +42,16 @@ import { CreateChurchDto } from './dto/create-church.dto';
 import { ChurchLoginDto } from './dto/login-church.dto';
 import appConfig from 'src/config/app.config';
 import { ForgotPasswordDto, ResetPasswordDto, VerifyOtpDto } from './dto/forgot-password.dto';
+import { UserType } from 'prisma/generated/enums';
+
+class RegisterWithFileDto extends CreateUserDto {
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Profile image (required for PRO_USER, optional for USER)',
+  })
+  avatar?: any;
+}
 
 @ApiTags('auth')
 @Controller('auth')
@@ -88,9 +99,23 @@ export class AuthController {
     }
   }
 
-  // User registration endpoint
+
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('avatar', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      fileFilter: (req, file, cb) => {
+        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+        if (allowedMimeTypes.includes(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Only JPEG, PNG, JPG, WEBP images are allowed'), false);
+        }
+      },
+    }),
+  )
   @ApiOperation({
     summary: 'Register a new user',
     description: `Creates a new user account. Supports both regular users and professional users.
@@ -99,16 +124,17 @@ export class AuthController {
 - **USER**: Looking for services (church members, regular users)
 - **PRO_USER**: Offering services (professionals, freelancers, business owners)
 
-**Professional fields are required for PRO_USER accounts only.**
+**Professional fields and avatar image are required for PRO_USER accounts only.**
 
 After registration:
 1. Account status will be 'pending'
 2. Admin approval required
 3. Email verification required before login`,
   })
+  @ApiConsumes('multipart/form-data')
   @ApiBody({
-    type: CreateUserDto,
-    description: 'User registration data',
+    type: RegisterWithFileDto,
+    description: 'User registration data with optional avatar image',
     examples: {
       regular_user: {
         summary: '📋 Regular User (Looking for services)',
@@ -153,15 +179,22 @@ After registration:
           state: 'New York',
           country: 'USA',
           zip_code: '10022',
-          description:
-            'Experienced childcare provider with 10+ years serving church families.',
+          description: 'Experienced childcare provider with 10+ years serving church families.',
           other_locations: 'Brooklyn, NY; Queens, NY',
         },
       },
     },
   })
-  async register(@Body() createUserDto: CreateUserDto) {
-    return this.authService.register(createUserDto);
+  async register(
+    @Body() createUserDto: CreateUserDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    // Validate file for PRO_USER
+    if (createUserDto.type === UserType.PRO_USER && !file) {
+      throw new BadRequestException('Avatar image is required for professional users');
+    }
+
+    return this.authService.register(createUserDto, file);
   }
 
   // User login endpoint

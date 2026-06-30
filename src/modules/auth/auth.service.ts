@@ -102,8 +102,7 @@ export class AuthService {
     }
   }
 
-  // done
-  async register(createUserDto: CreateUserDto) {
+  async register(createUserDto: CreateUserDto, file?: Express.Multer.File) {
     const {
       first_name,
       last_name,
@@ -213,24 +212,57 @@ export class AuthService {
       }
     }
 
-    // 7. Hash password
+    // 7. Handle avatar image upload
+    let avatarUrl: string | null = null;
+
+    if (file) {
+      // Validate file type
+      const allowedMimeTypes = [
+        'image/jpeg',
+        'image/png',
+        'image/jpg',
+        'image/webp',
+      ];
+      if (!allowedMimeTypes.includes(file.mimetype)) {
+        throw new BadRequestException(
+          `Invalid file type: ${file.originalname}. Only JPEG, PNG, JPG, WEBP are allowed`,
+        );
+      }
+
+      // Generate unique filename
+      const fileExtension = file.originalname.split('.').pop();
+      const fileName = `avatar_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+
+      // Upload to storage using avatar path
+      await TanvirStorage.put(
+        `${appConfig().storageUrl.avatar}/${fileName}`,
+        file.buffer,
+      );
+
+      // Construct full URL using APP_URL
+      const appUrl = appConfig().app.url;
+      avatarUrl = `${appUrl}${appConfig().storageUrl.rootUrlPublic}${appConfig().storageUrl.avatar}/${fileName}`;
+    }
+
+    // 8. Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 8. Create user with transaction
+    // 9. Create user with transaction
     const result = await this.prisma.$transaction(async (tx) => {
-      // Create the user (without church_id field)
+      // Create the user
       const user = await tx.user.create({
         data: {
           first_name,
           last_name,
           phone_number,
-          church_name: existingChurch.church_name, // Use the exact church name from DB
+          church_name: existingChurch.church_name,
           language,
           email,
           password: hashedPassword,
           type: type || UserType.USER,
           status: UserStatus.PENDING,
           email_verified_at: null,
+          avatar: avatarUrl, // Store the full URL in avatar field
           // Professional fields (only for PRO_USER)
           ...(type === UserType.PRO_USER && {
             company_name,
@@ -248,6 +280,7 @@ export class AuthService {
             country,
             zip_code,
             description,
+            other_locations: other_locations || null,
           }),
         },
       });
@@ -296,7 +329,7 @@ export class AuthService {
       return { user, otpCode, church: existingChurch };
     });
 
-    // 9. Send OTP email
+    // 10. Send OTP email
     try {
       await this.mailService.sendOtpCodeToEmail({
         email: email,
@@ -307,16 +340,15 @@ export class AuthService {
       console.error('Failed to send OTP email:', emailError);
     }
 
-     /*------------------------------------------
-        Notification for registration start
+    /*------------------------------------------
+       Notification for registration start
     ------------------------------------------*/
-      
-     /*------------------------------------------
-        Notification for registration end
-     ------------------------------------------*/
-        
 
-    // 10. Return response
+    /*------------------------------------------
+       Notification for registration end
+    ------------------------------------------*/
+
+    // 11. Return response
     return {
       success: true,
       message:
@@ -328,6 +360,7 @@ export class AuthService {
         email: result.user.email,
         type: result.user.type,
         status: result.user.status,
+        avatar: result.user.avatar, // Return avatar URL in response
         church: {
           id: result.church.id,
           name: result.church.church_name,
@@ -424,8 +457,6 @@ export class AuthService {
       // TODO: Verify 2FA token
     }
 
-     
-   
     const currentRole = user.roles_assigned_to_me[0]?.role;
 
     console.log(

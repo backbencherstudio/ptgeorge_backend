@@ -47,7 +47,7 @@ import { ChurchAdminApplicationModule } from './modules/church-admin/church-admi
         host: appConfig().redis.host,
         password: appConfig().redis.password,
         port: +appConfig().redis.port,
-      },
+      }, 
     }),
     // disabling throttling for dev
     // ThrottlerModule.forRoot([

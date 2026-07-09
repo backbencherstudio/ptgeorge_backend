@@ -10,6 +10,8 @@ import {
   ProUserListItemDto,
   ProUserDetailsDto,
 } from './dto/pro-user.dto';
+import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
+import appConfig from 'src/config/app.config';
 
 @Injectable()
 export class ProUserService {
@@ -32,6 +34,7 @@ export class ProUserService {
       profession,
       distance,
       minRating,
+      churchName,
       page = 1,
       limit = 10,
     } = filterDto;
@@ -53,12 +56,42 @@ export class ProUserService {
       throw new ForbiddenException('You are not a member of any church');
     }
 
-    const churchId = currentUserMembership.church_id;
+    // Get church IDs based on church name filter
+    let churchIds: string[] = [];
 
-    // Get all PRO_USER members from the same church
+    if (churchName) {
+      // If church name is provided, find all churches with that name
+      const churches = await this.prisma.church.findMany({
+        where: {
+          church_name: { contains: churchName, mode: 'insensitive' },
+          deleted_at: null,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      churchIds = churches.map((church) => church.id);
+
+      // If no churches found with that name, return empty result
+      if (churchIds.length === 0) {
+        return {
+          data: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+        };
+      }
+    } else {
+      // If no church name filter, use the current user's church
+      churchIds = [currentUserMembership.church_id];
+    }
+
+    // Get all PRO_USER members from the specified churches
     const churchMemberIds = await this.prisma.churchMember.findMany({
       where: {
-        church_id: churchId,
+        church_id: { in: churchIds },
         status: 'ACTIVE',
         deleted_at: null,
         user: {
@@ -68,6 +101,7 @@ export class ProUserService {
       },
       select: {
         user_id: true,
+        church_id: true,
       },
     });
 
@@ -133,8 +167,28 @@ export class ProUserService {
           user.state,
         );
 
-        return {
+        // Get the church name for this user
+        const userChurch = await this.prisma.churchMember.findFirst({
+          where: {
+            user_id: user.id,
+            status: 'ACTIVE',
+            deleted_at: null,
+          },
+          include: {
+            church: true,
+          },
+        });
+
+        // Format avatar URL if exists
+        const avatarUrl = user.avatar
+          ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
+          : null;
+
+        // Create the DTO object
+        const dto: ProUserListItemDto = {
           id: user.id,
+          firstName: user.first_name,
+          lastName: user.last_name,
           fullName: `${user.first_name} ${user.last_name}`,
           companyName: user.company_name,
           profession: user.profession,
@@ -147,9 +201,16 @@ export class ProUserService {
             state: user.state,
             zipCode: user.zip_code,
           },
-          avatar: user.avatar,
+          avatar: avatarUrl, // Full URL
           description: user.description,
-        } as ProUserListItemDto;
+        };
+
+        // Add churchName if the DTO supports it (optional field)
+        if (userChurch?.church?.church_name) {
+          (dto as any).churchName = userChurch.church.church_name;
+        }
+
+        return dto;
       }),
     );
 
@@ -173,7 +234,7 @@ export class ProUserService {
     };
   }
 
-  async findOne(id: string, currentUserId: string): Promise<ProUserDetailsDto> {
+  async findOne(id: string, currentUserId: string) {
     // First, get the current user's church membership
     const currentUserMembership = await this.prisma.churchMember.findFirst({
       where: {
@@ -206,6 +267,7 @@ export class ProUserService {
             skills: true,
           },
         },
+        church: true,
       },
     });
 
@@ -217,6 +279,21 @@ export class ProUserService {
 
     const user = proUserMembership.user;
     const ratingData = await this.getUserRating(user.id);
+
+    // Import TanvirStorage or your storage utility at the top of the file
+    // import { TanvirStorage } from 'path-to-tanvir-storage';
+    // import { appConfig } from 'path-to-app-config';
+
+    // Format avatar URL if exists
+    const avatarUrl = user.avatar
+      ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
+      : null;
+
+    // Format portfolio images URLs
+    const portfolioImageUrls =
+      user.portfolio_images?.map((fileName) =>
+        TanvirStorage.url(`${appConfig().storageUrl.portfolio}/${fileName}`),
+      ) || [];
 
     return {
       id: user.id,
@@ -234,7 +311,7 @@ export class ProUserService {
         state: user.state,
         zipCode: user.zip_code,
       },
-      avatar: user.avatar,
+      avatar: avatarUrl, // Full URL
       description: user.description,
       businessEmail: user.business_email,
       businessPhone: user.business_phone,
@@ -246,13 +323,14 @@ export class ProUserService {
       state: user.state,
       country: user.country,
       businessPortfolio: user.business_portfolio,
-      portfolioImages: user.portfolio_images,
+      portfolioImages: portfolioImageUrls, // Full URLs
       skills: user.skills.map((skill) => ({
         id: skill.id,
         skillName: skill.skill_name,
       })),
       aboutMe: user.about_me,
       availability: user.availability,
+      churchName: proUserMembership.church.church_name,
     };
   }
 

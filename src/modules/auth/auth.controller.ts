@@ -43,6 +43,7 @@ import { ChurchLoginDto } from './dto/login-church.dto';
 import appConfig from 'src/config/app.config';
 import { ForgotPasswordDto, ResetPasswordDto, VerifyOtpDto } from './dto/forgot-password.dto';
 import { UserType } from 'prisma/generated/enums';
+import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
 
 class RegisterWithFileDto extends CreateUserDto {
   @ApiPropertyOptional({
@@ -55,6 +56,7 @@ class RegisterWithFileDto extends CreateUserDto {
 
 @ApiTags('auth')
 @Controller('auth')
+@ApiBearerAuth(SWAGGER_AUTH.PRO_USER)
 export class AuthController {
   constructor(private authService: AuthService) {}
 
@@ -99,7 +101,6 @@ export class AuthController {
     }
   }
 
-
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
@@ -107,11 +108,21 @@ export class AuthController {
       storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
       fileFilter: (req, file, cb) => {
-        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+        const allowedMimeTypes = [
+          'image/jpeg',
+          'image/png',
+          'image/jpg',
+          'image/webp',
+        ];
         if (allowedMimeTypes.includes(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new BadRequestException('Only JPEG, PNG, JPG, WEBP images are allowed'), false);
+          cb(
+            new BadRequestException(
+              'Only JPEG, PNG, JPG, WEBP images are allowed',
+            ),
+            false,
+          );
         }
       },
     }),
@@ -179,7 +190,8 @@ After registration:
           state: 'New York',
           country: 'USA',
           zip_code: '10022',
-          description: 'Experienced childcare provider with 10+ years serving church families.',
+          description:
+            'Experienced childcare provider with 10+ years serving church families.',
           other_locations: 'Brooklyn, NY; Queens, NY',
         },
       },
@@ -191,7 +203,9 @@ After registration:
   ) {
     // Validate file for PRO_USER
     if (createUserDto.type === UserType.PRO_USER && !file) {
-      throw new BadRequestException('Avatar image is required for professional users');
+      throw new BadRequestException(
+        'Avatar image is required for professional users',
+      );
     }
 
     return this.authService.register(createUserDto, file);
@@ -378,7 +392,6 @@ After registration:
     return result;
   }
 
-  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Patch('profile')
   @ApiOperation({ summary: 'Update user profile' })

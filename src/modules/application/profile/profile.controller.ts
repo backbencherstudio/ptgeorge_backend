@@ -11,6 +11,8 @@ import {
   UseInterceptors,
   UploadedFile,
   UploadedFiles,
+  Query,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -18,6 +20,7 @@ import {
   ApiConsumes,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -30,6 +33,9 @@ import { memoryStorage } from 'multer';
 import { PortfolioDto } from './dto/create-portfolio.dto';
 import { CreateSkillDto } from './dto/create-skill.dto';
 import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
+import { PaginationDto } from 'src/common/pagination';
+import { plainToClass } from 'class-transformer';
+import { validate } from 'class-validator';
 
 @ApiTags('Profile')
 @ApiBearerAuth(SWAGGER_AUTH.PRO_USER)
@@ -42,7 +48,7 @@ export class ProfileController {
           Edit profile routes
   ------------------------------------*/
 
-  // get profile
+// get profile
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({
@@ -56,12 +62,6 @@ export class ProfileController {
   }
 
   // update profile
-  @UseInterceptors(
-    FileInterceptor('avatar', {
-      storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 },
-    }),
-  )
   @Patch('me')
   @ApiOperation({ summary: 'Update user profile with optional avatar' })
   @ApiConsumes('multipart/form-data')
@@ -69,13 +69,92 @@ export class ProfileController {
     type: UpdateProfileDto,
     description: 'Update profile information and avatar',
   })
+  @UseInterceptors(
+    FileInterceptor('avatar', {
+      storage: memoryStorage(),
+      limits: { 
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.(jpg|jpeg|png|webp)$/)) {
+          return cb(new BadRequestException('Only image files (JPG, JPEG, PNG, WEBP) are allowed!'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
   async updateProfile(
     @Req() req,
-    @Body() updateProfileDto: UpdateProfileDto,
     @UploadedFile() avatar?: Express.Multer.File,
+    @Body() updateProfileDto?: UpdateProfileDto,
   ) {
+    const userId = req.user.userId;
+    
+    // Handle the case where updateProfileDto might be undefined
+    const dto = updateProfileDto || {};
+    
+    // Convert and validate the DTO
+    const validatedDto = plainToClass(UpdateProfileDto, dto);
+    const errors = await validate(validatedDto, { 
+      skipMissingProperties: true,
+      whitelist: true,
+      forbidNonWhitelisted: false,
+    });
+    
+    if (errors.length > 0) {
+      const errorMessages = errors
+        .map(error => Object.values(error.constraints || {}).join(', '))
+        .join('; ');
+      throw new BadRequestException(`Validation failed: ${errorMessages}`);
+    }
+    
+    return this.profileService.updateProfile(userId, validatedDto, avatar);
+  }
+
+
+  @Get('posts')
+  @ApiOperation({
+    summary: 'Get all posts created by the current user',
+    description:
+      'Retrieve all posts created by the authenticated user with pagination',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Number of items per page (default: 10, max: 50)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User posts retrieved successfully.',
+    schema: {
+      example: {
+        success: true,
+        message: 'User posts retrieved successfully.',
+        data: [],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total: 25,
+          totalPages: 3,
+          hasNextPage: true,
+          hasPrevPage: false,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getUserPosts(@Req() req, @Query() paginationDto: PaginationDto) {
     const user = req.user.userId;
-    return this.profileService.updateProfile(user, updateProfileDto, avatar);
+    return this.profileService.getUserPosts(user, paginationDto);
   }
 
   /*-----------------------------------

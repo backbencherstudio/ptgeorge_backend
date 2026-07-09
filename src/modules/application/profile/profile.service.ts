@@ -9,7 +9,11 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { TanvirStorage } from 'src/common/lib/Disk/TanvirStorage';
 import appConfig from 'src/config/app.config';
 import { CreateSkillDto } from './dto/create-skill.dto';
-import { onlySendUserNotification, sendAdminNotification } from 'src/common/repository/notification/utils/notification.utils';
+import {
+  onlySendUserNotification,
+  sendAdminNotification,
+} from 'src/common/repository/notification/utils/notification.utils';
+import { PaginationDto } from '../pro-user/dto/pro-user.dto';
 
 @Injectable()
 export class ProfileService {
@@ -63,6 +67,7 @@ export class ProfileService {
         gender: true,
         date_of_birth: true,
         availability: true,
+        portfolio_images: true, // Added this to return full URLs
       },
     });
 
@@ -70,14 +75,27 @@ export class ProfileService {
       throw new NotFoundException('User not found');
     }
 
+    // Format avatar URL if exists
+    const formattedUser = {
+      ...user,
+      avatar: user.avatar
+        ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
+        : null,
+      // Format portfolio images URLs if needed
+      portfolio_images:
+        user.portfolio_images?.map((fileName) =>
+          TanvirStorage.url(`${appConfig().storageUrl.portfolio}/${fileName}`),
+        ) || [],
+    };
+
     return {
       success: true,
       message: 'Profile retrieved successfully',
-      data: user,
+      data: formattedUser,
     };
   }
 
-  // update my profile
+  // update my profile - complete version
   async updateProfile(
     userId: string,
     updateProfileDto: UpdateProfileDto,
@@ -93,92 +111,95 @@ export class ProfileService {
       throw new NotFoundException('User not found');
     }
 
-    if (updateProfileDto.first_name) {
-      data.first_name = updateProfileDto.first_name;
+    // Process all text fields from updateProfileDto
+    const fields = [
+      'first_name',
+      'last_name',
+      'phone_number',
+      'language',
+      'church_name',
+      'company_name',
+      'business_email',
+      'business_phone',
+      'service',
+      'category',
+      'profession',
+      'website',
+      'whatsapp_number',
+      'available_time',
+      'address_line1',
+      'address_line2',
+      'state',
+      'country',
+      'zip_code',
+      'description',
+      'business_portfolio',
+      'about_me',
+      'address',
+      'name',
+      'location',
+      'bio',
+      'username',
+      'city',
+      'gender',
+      'availability',
+      'other_locations',
+    ];
+
+    fields.forEach((field) => {
+      if (
+        updateProfileDto[field] !== undefined &&
+        updateProfileDto[field] !== null
+      ) {
+        data[field] = updateProfileDto[field];
+      }
+    });
+
+    // Handle date_of_birth separately
+    if (updateProfileDto.date_of_birth) {
+      data.date_of_birth = new Date(updateProfileDto.date_of_birth);
     }
 
-    if (updateProfileDto.last_name) {
-      data.last_name = updateProfileDto.last_name;
+    // Handle avatar upload
+    if (avatar) {
+      // Delete old image if exists
+      if (existingUser.avatar) {
+        try {
+          await TanvirStorage.delete(
+            `${appConfig().storageUrl.avatar}/${existingUser.avatar}`,
+          );
+        } catch (error) {
+          console.error('Failed to delete old avatar:', error);
+        }
+      }
+
+      // Validate file type
+      const allowedMimeTypes = [
+        'image/jpeg',
+        'image/png',
+        'image/jpg',
+        'image/webp',
+      ];
+      if (!allowedMimeTypes.includes(avatar.mimetype)) {
+        throw new BadRequestException(
+          `Invalid file type: ${avatar.originalname}. Only JPEG, PNG, JPG, WEBP are allowed`,
+        );
+      }
+
+      // Upload new image
+      const fileExtension = avatar.originalname.split('.').pop();
+      const fileName = `avatar_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
+
+      await TanvirStorage.put(
+        `${appConfig().storageUrl.avatar}/${fileName}`,
+        avatar.buffer,
+      );
+
+      data.avatar = fileName;
     }
 
-    if (updateProfileDto.phone_number) {
-      data.phone_number = updateProfileDto.phone_number;
-    }
-
-    if (updateProfileDto.language) {
-      data.language = updateProfileDto.language;
-    }
-
-    if (updateProfileDto.language) {
-      data.language = updateProfileDto.language;
-    }
-
-    if (updateProfileDto.company_name) {
-      data.company_name = updateProfileDto.company_name;
-    }
-
-    if (updateProfileDto.business_email) {
-      data.business_email = updateProfileDto.business_email;
-    }
-
-    if (updateProfileDto.business_phone) {
-      data.business_phone = updateProfileDto.business_phone;
-    }
-
-    if (updateProfileDto.service) {
-      data.service = updateProfileDto.service;
-    }
-
-    if (updateProfileDto.category) {
-      data.category = updateProfileDto.category;
-    }
-
-    if (updateProfileDto.profession) {
-      data.profession = updateProfileDto.profession;
-    }
-
-    if (updateProfileDto.website) {
-      data.website = updateProfileDto.website;
-    }
-
-    if (updateProfileDto.whatsapp_number) {
-      data.whatsapp_number = updateProfileDto.whatsapp_number;
-    }
-
-    if (updateProfileDto.available_time) {
-      data.available_time = updateProfileDto.available_time;
-    }
-
-    if (updateProfileDto.address_line1) {
-      data.address_line1 = updateProfileDto.address_line1;
-    }
-
-    if (updateProfileDto.address_line2) {
-      data.address_line2 = updateProfileDto.address_line2;
-    }
-
-    if (updateProfileDto.state) {
-      data.state = updateProfileDto.state;
-    }
-
-    if (updateProfileDto.country) {
-      data.country = updateProfileDto.country;
-    }
-
-    if (updateProfileDto.zip_code) {
-      data.zip_code = updateProfileDto.zip_code;
-    }
-
-    if (updateProfileDto.description) {
-      data.business_portfolio = updateProfileDto.description;
-    }
-
-    if (updateProfileDto.description) {
-      data.other_locations = updateProfileDto.other_locations;
-    }
-
-    // If client requested explicit avatar removal (and not uploading a new one)
-    if ((updateProfileDto as any).remove_avatar && !avatar) {
+    // Handle avatar removal
+    if (updateProfileDto.remove_avatar === true && !avatar) {
       if (existingUser.avatar) {
         try {
           await TanvirStorage.delete(
@@ -194,31 +215,13 @@ export class ProfileService {
       data.avatar = null;
     }
 
-    if (avatar) {
-      // Delete old image if exists
-      if (existingUser.avatar) {
-        try {
-          await TanvirStorage.delete(
-            `${appConfig().storageUrl.avatar}/${existingUser.avatar}`,
-          );
-        } catch (error) {
-          console.error('Failed to delete old avatar:', error);
-        }
-      }
-
-      // Upload new image
-      const fileExtension = avatar.originalname.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
-
-      await TanvirStorage.put(
-        `${appConfig().storageUrl.avatar}/${fileName}`,
-        avatar.buffer,
-      );
-      data.avatar = fileName;
-    }
-
-    if (!existingUser) {
-      throw new NotFoundException('User not found');
+    // Only update if there's data to update
+    if (Object.keys(data).length === 0) {
+      return {
+        success: true,
+        message: 'No changes to update',
+        data: existingUser,
+      };
     }
 
     const updatedUser = await this.prisma.user.update({
@@ -234,11 +237,258 @@ export class ProfileService {
       entity_id: userId,
     });
 
-
     return {
       success: true,
       message: 'Profile updated successfully',
       data: updatedUser,
+    };
+  }
+
+  async getUserPosts(userId: string, paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+
+    // Validate and limit the limit parameter
+    const take = Math.min(Math.max(limit, 1), 50);
+    const skip = (Math.max(page, 1) - 1) * take;
+
+    // Check if user exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id: userId, deleted_at: null },
+      select: { id: true },
+    });
+
+    if (!existingUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Get church member ID for the user
+    const churchMember = await this.prisma.churchMember.findFirst({
+      where: {
+        user_id: userId,
+        church: {
+          deleted_at: null,
+        },
+      },
+      select: {
+        id: true,
+        church_id: true,
+        church_role: true,
+        user: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    if (!churchMember) {
+      return {
+        success: true,
+        message: 'User posts retrieved successfully.',
+        data: [],
+        pagination: {
+          page,
+          limit: take,
+          total: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      };
+    }
+
+    // Build where clause for posts by this user
+    const where = {
+      church_member_id: churchMember.id,
+      deleted_at: null,
+    };
+
+    // Get total count for pagination
+    const total = await this.prisma.churchPost.count({
+      where,
+    });
+
+    // Get posts with pagination
+    const posts = await this.prisma.churchPost.findMany({
+      where,
+      orderBy: {
+        created_at: 'desc',
+      },
+      skip,
+      take,
+      include: {
+        church_member: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+        comments: {
+          orderBy: { created_at: 'desc' },
+          take: 3,
+          include: {
+            church_member: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    avatar: true,
+                  },
+                },
+              },
+            },
+            replies: {
+              take: 2,
+              include: {
+                church_member: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        first_name: true,
+                        last_name: true,
+                        avatar: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        reacts: true,
+        _count: {
+          select: {
+            comments: true,
+            reacts: true,
+          },
+        },
+      },
+    });
+
+    if (posts.length === 0) {
+      return {
+        success: true,
+        message: 'User posts retrieved successfully.',
+        data: [],
+        pagination: {
+          page,
+          limit: take,
+          total,
+          totalPages: Math.ceil(total / take),
+          hasNextPage: page < Math.ceil(total / take),
+          hasPrevPage: page > 1,
+        },
+      };
+    }
+
+    // Get reaction counts for posts
+    const postIds = posts.map((p) => p.id);
+
+    // Get reaction counts grouped by post and type
+    const reactCounts = await this.prisma.churchPostReact.groupBy({
+      by: ['post_id', 'react_type'],
+      where: {
+        post_id: { in: postIds },
+      },
+      _count: {
+        _all: true,
+      },
+    });
+
+    // Create a map of post_id to reaction counts
+    const reactCountsMap = new Map();
+    reactCounts.forEach((item) => {
+      const existing = reactCountsMap.get(item.post_id) || { LIKE: 0, LOVE: 0 };
+      if (item.react_type === 'LIKE') {
+        existing.LIKE = item._count._all;
+      } else if (item.react_type === 'LOVE') {
+        existing.LOVE = item._count._all;
+      }
+      reactCountsMap.set(item.post_id, existing);
+    });
+
+    // Get user's reactions for each post
+    const userReactions = await this.prisma.churchPostReact.findMany({
+      where: {
+        post_id: { in: postIds },
+        church_member_id: churchMember.id,
+      },
+      select: {
+        post_id: true,
+        react_type: true,
+      },
+    });
+
+    const userReactionMap = new Map(
+      userReactions.map((r) => [r.post_id, r.react_type]),
+    );
+
+    // Helper function for image URLs (assuming you have these methods)
+    const getFullImageUrl = (fileName: string | null, type: string) => {
+      if (!fileName) return null;
+      // Implement your URL generation logic here
+      // This is just an example - adjust based on your setup
+      return TanvirStorage.url(`${appConfig().storageUrl[type]}/${fileName}`);
+    };
+
+    const getFullImageUrls = (images: string[] | null, type: string) => {
+      if (!images || !Array.isArray(images)) return [];
+      return images.map((img) => getFullImageUrl(img, type)).filter(Boolean);
+    };
+
+    const formattedPosts = posts.map((post) => {
+      const authorRole = post.church_member.church_role || 'Church Member';
+      const postReactions = reactCountsMap.get(post.id) || { LIKE: 0, LOVE: 0 };
+
+      return {
+        id: post.id,
+        content: post.content,
+        images: getFullImageUrls(post.images, 'post'),
+        created_at: post.created_at,
+        updated_at: post.updated_at,
+        author: {
+          id: post.church_member.user.id,
+          name: `${post.church_member.user.first_name} ${post.church_member.user.last_name}`,
+          avatar: getFullImageUrl(post.church_member.user.avatar, 'avatar'),
+          role: authorRole,
+        },
+        stats: {
+          comments_count: post._count.comments,
+          reacts_count: post._count.reacts,
+          reaction_counts: postReactions,
+        },
+        myreact: userReactionMap.has(post.id),
+        is_reacted: userReactionMap.has(post.id),
+        user_reacted: userReactionMap.get(post.id) || null,
+      };
+    });
+
+    const totalPages = Math.ceil(total / take);
+
+    return {
+      success: true,
+      message: 'User posts retrieved successfully.',
+      data: formattedPosts,
+      pagination: {
+        page,
+        limit: take,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
     };
   }
 
@@ -250,7 +500,7 @@ export class ProfileService {
   async uploadPortfolioImage(
     userId: string,
     files?: Express.Multer.File[],
-    deleteImages?: string[],
+    deleteImages?: string | string[],
   ) {
     const existingUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -269,9 +519,22 @@ export class ProfileService {
         : [];
     }
 
-    // Delete images if deleteImages array is provided
-    if (deleteImages && deleteImages.length > 0) {
-      for (const imageUrl of deleteImages) {
+    // Normalize deleteImages to an array (accept array, comma-separated string, or single string)
+    let imagesToDelete: string[] = [];
+    if (deleteImages) {
+      if (Array.isArray(deleteImages)) {
+        imagesToDelete = deleteImages;
+      } else if (typeof deleteImages === 'string') {
+        imagesToDelete = deleteImages
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    }
+
+    // Delete images if any provided
+    if (imagesToDelete.length > 0) {
+      for (const imageUrl of imagesToDelete) {
         const fileName = imageUrl.split('/').pop();
         if (fileName) {
           try {
@@ -279,7 +542,7 @@ export class ProfileService {
               `${appConfig().storageUrl.portfolio}/${fileName}`,
             );
 
-            // ✅ portfolio now stores plain filenames, compare directly
+            // portfolio stores plain filenames, compare directly
             portfolio = portfolio.filter((img) => img !== fileName);
           } catch (error) {
             console.error('Failed to delete portfolio image:', error);
@@ -325,7 +588,6 @@ export class ProfileService {
       },
     });
 
-
     await onlySendUserNotification({
       sender_id: userId,
       receiver_id: userId,
@@ -333,7 +595,6 @@ export class ProfileService {
       type: 'profile_update',
       entity_id: userId,
     });
-
 
     return {
       success: true,

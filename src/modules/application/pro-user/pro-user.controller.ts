@@ -57,7 +57,12 @@ export class ProUserController {
   })
   async getFilterOptions(@Req() req: any) {
     const userId = req.user.id;
-    return this.proUserService.getFilterOptions(userId);
+    const result = await this.proUserService.getFilterOptions(userId);
+    return {
+      success: true,
+      message: 'Filter options retrieved successfully',
+      data: result,
+    };
   }
 
   @Get(':id')
@@ -69,6 +74,11 @@ export class ProUserController {
   @ApiResponse({ status: 404, description: 'Pro user not found' })
   async findOne(@Param('id') id: string, @Req() req: any) {
     const userId = req.user.id;
-    return this.proUserService.findOne(id, userId);
+    const result = await this.proUserService.findOne(id, userId);
+    return {
+      success: true,
+      message: 'Pro user details retrieved successfully',
+      data: result,
+    };
   }
 }

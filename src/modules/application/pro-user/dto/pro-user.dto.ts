@@ -54,6 +54,14 @@ export class ProUserFilterDto {
   @Max(5)
   minRating?: number;
 
+  @ApiProperty({
+    required: false,
+    description: 'Filter by church name',
+  })
+  @IsOptional()
+  @IsString()
+  churchName?: string;
+
   @ApiProperty({ required: false, default: 1 })
   @IsOptional()
   @Type(() => Number)

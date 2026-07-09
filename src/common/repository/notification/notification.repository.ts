@@ -1,9 +1,22 @@
+import 'dotenv/config';
 import * as admin from 'firebase-admin';
 import { PrismaPg } from '@prisma/adapter-pg';
 import appConfig from '../../../config/app.config';
 import { PrismaClient } from '../../../../prisma/generated/client';
 
 const connectionString = appConfig().database.url;
+
+// Validate the database connection string early to give a clear error
+if (
+  !connectionString ||
+  !/^postgres(?:ql)?:\/\//i.test(String(connectionString))
+) {
+  console.error('Invalid or missing DATABASE_URL:', connectionString);
+  throw new Error(
+    'Invalid DATABASE_URL. Please check your .env or environment variables and ensure DATABASE_URL is set to a valid Postgres connection string.',
+  );
+}
+
 const adapter = new PrismaPg({ connectionString });
 export const prisma = new PrismaClient({ adapter });
 
@@ -51,7 +64,7 @@ export type NotificationType =
   | 'reject_job_submission'
   | 'conversation_created'
   | 'cancel_booking'
-  |  'role_created'
+  | 'role_created'
   | 'community'
   | 'cleaner_verification_update'
   | 'review_booking'
@@ -59,7 +72,6 @@ export type NotificationType =
   | 'update_booking';
 
 export class NotificationRepository {
-  
   // create notification
   static async createNotification(payload: {
     sender_id?: string | null;
@@ -69,7 +81,7 @@ export class NotificationRepository {
     entity_id: string;
   }) {
     let { sender_id, receiver_id, text, type, entity_id } = payload;
-    const safeSenderId = sender_id === 'system' ? null : sender_id ?? null;
+    const safeSenderId = sender_id === 'system' ? null : (sender_id ?? null);
 
     try {
       let notificationEvent = await prisma.notificationEvent.findFirst({
@@ -173,6 +185,4 @@ export class NotificationRepository {
 
     return titles[type] || 'New Notification';
   }
-
-  
 }

@@ -34,7 +34,7 @@ async function bootstrap() {
     credentials: true,
   });
   app.use(helmetConfig());
-  app.use(rateLimiterConfig());
+  // app.use(rateLimiterConfig());
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const url = req.originalUrl || req.url;

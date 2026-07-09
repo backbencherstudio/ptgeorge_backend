@@ -41,7 +41,7 @@ import { CursorPaginationDto } from './dto/cursor-pagination.dto';
 import { Public } from 'src/common/guard/role/public.decorator';
 
 @ApiTags('Church Community')
-@ApiBearerAuth(SWAGGER_AUTH.CHURCH_MEMBER)
+@ApiBearerAuth(SWAGGER_AUTH.PRO_USER)
 @Controller('church-community')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(

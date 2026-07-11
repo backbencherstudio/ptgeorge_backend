@@ -49,7 +49,6 @@ export class ProUserController {
     };
   }
 
-  @Public()
   @Get('filter-options')
   @ApiOperation({
     summary: 'Get available filter options (services, professions, distances)',
@@ -59,7 +58,7 @@ export class ProUserController {
     description: 'Returns filter options for dropdowns',
   })
   async getFilterOptions(@Req() req: any) {
-    const userId = req.user.id;
+    const userId = req.user?.id || req.user?.userId;
     const result = await this.proUserService.getFilterOptions(userId);
     return {
       success: true,

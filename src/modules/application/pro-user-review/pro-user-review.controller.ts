@@ -39,10 +39,13 @@ import {
   FilesInterceptor,
 } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { Role } from 'src/common/guard/role/role.enum';
+import { Roles } from 'src/common/guard/role/roles.decorator';
 
 @ApiTags('Pro Users - Reviews & Follows')
 @ApiBearerAuth(SWAGGER_AUTH.CHURCH_MEMBER)
 @Controller('pro-users')
+@Roles(Role.CHURCH_MEMBER, Role.PRO_USER, Role.CHURCH_ADMIN, Role.ADMIN, Role.SUPER_ADMIN)
 @UseGuards(JwtAuthGuard)
 export class ProUserReviewController {
   constructor(private readonly reviewService: ProUserReviewService) {}

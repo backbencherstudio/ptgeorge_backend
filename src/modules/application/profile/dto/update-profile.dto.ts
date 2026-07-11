@@ -275,4 +275,30 @@ export class UpdateProfileDto extends PartialType(CreateProfileDto) {
   @IsOptional()
   @IsString()
   church_name?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Hide address from public profile',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  hide_address?: boolean;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Work globally',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  work_globally?: boolean;
 }

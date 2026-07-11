@@ -56,7 +56,7 @@ class RegisterWithFileDto extends CreateUserDto {
 
 @ApiTags('auth')
 @Controller('auth')
-@ApiBearerAuth(SWAGGER_AUTH.PRO_USER)
+@ApiBearerAuth(SWAGGER_AUTH.SUPER_ADMIN)
 export class AuthController {
   constructor(private authService: AuthService) {}
 

@@ -113,49 +113,68 @@ export class ProfileService {
       throw new NotFoundException('User not found');
     }
 
-    // Process all text fields from updateProfileDto
-    const fields = [
-      'first_name',
-      'last_name',
-      'phone_number',
-      'language',
-      'church_name',
-      'company_name',
-      'business_email',
-      'business_phone',
-      'service',
-      'category',
-      'profession',
-      'website',
-      'whatsapp_number',
-      'available_time',
-      'address_line1',
-      'address_line2',
-      'state',
-      'country',
-      'zip_code',
-      'description',
-      'business_portfolio',
-      'about_me',
-      'address',
-      'name',
-      'location',
-      'bio',
-      'username',
-      'city',
-      'gender',
-      'availability',
-      'other_locations',
-    ];
+    // Define all updatable fields with their transformation logic
+    const fieldMap = {
+      // Basic fields
+      first_name: { type: 'string' },
+      last_name: { type: 'string' },
+      phone_number: { type: 'string' },
+      language: { type: 'string' },
+      church_name: { type: 'string' },
 
-    fields.forEach((field) => {
-      if (
-        updateProfileDto[field] !== undefined &&
-        updateProfileDto[field] !== null
-      ) {
-        data[field] = updateProfileDto[field];
+      // Professional fields
+      company_name: { type: 'string' },
+      business_email: { type: 'string' },
+      business_phone: { type: 'string' },
+      service: { type: 'string' },
+      category: { type: 'string' },
+      profession: { type: 'string' },
+      website: { type: 'string' },
+      whatsapp_number: { type: 'string' },
+      available_time: { type: 'string' },
+
+      // Address fields
+      address_line1: { type: 'string' },
+      address_line2: { type: 'string' },
+      state: { type: 'string' },
+      country: { type: 'string' },
+      zip_code: { type: 'string' },
+
+      // Additional fields
+      description: { type: 'string' },
+      business_portfolio: { type: 'string' },
+      about_me: { type: 'string' },
+      address: { type: 'string' },
+      name: { type: 'string' },
+      location: { type: 'string' },
+      bio: { type: 'string' },
+      username: { type: 'string' },
+      city: { type: 'string' },
+      gender: { type: 'string' },
+      availability: { type: 'string' },
+      other_locations: { type: 'string' },
+
+      hide_address: { type: 'boolean' },
+      work_globally: { type: 'boolean' },
+    };
+
+    // Process each field
+    for (const [dtoField, config] of Object.entries(fieldMap)) {
+      const value = updateProfileDto[dtoField];
+      if (value !== undefined && value !== null) {
+        // Handle boolean transformation
+        if (config.type === 'boolean') {
+          // Convert string 'true'/'false' to actual boolean
+          if (typeof value === 'string') {
+            data[dtoField] = value === 'true' || value === '1';
+          } else {
+            data[dtoField] = value;
+          }
+        } else {
+          data[dtoField] = value;
+        }
       }
-    });
+    }
 
     // Handle date_of_birth separately
     if (updateProfileDto.date_of_birth) {
@@ -231,6 +250,7 @@ export class ProfileService {
       data: data,
     });
 
+    // Send notification (optional)
     await onlySendUserNotification({
       sender_id: userId,
       receiver_id: userId,

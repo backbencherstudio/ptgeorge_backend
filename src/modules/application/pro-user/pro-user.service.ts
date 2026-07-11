@@ -41,47 +41,87 @@ export class ProUserService {
     const skip = (page - 1) * limit;
 
     let churchIds: string[] = [];
+    let isSuperAdmin = false;
 
     // Handle church filtering based on user authentication
     if (currentUserId) {
-      // Logged-in user: get their church membership
-      const currentUserMembership = await this.prisma.churchMember.findFirst({
+      // Check if the user is a SUPER_ADMIN
+      const currentUser = await this.prisma.user.findUnique({
         where: {
-          user_id: currentUserId,
-          status: 'ACTIVE',
+          id: currentUserId,
           deleted_at: null,
         },
-        include: {
-          church: true,
+        select: {
+          type: true,
         },
       });
 
-      if (!currentUserMembership) {
-        throw new ForbiddenException('You are not a member of any church');
-      }
+      isSuperAdmin = currentUser?.type === 'SUPER_ADMIN';
 
-      // Get church IDs based on church name filter
-      if (churchName) {
-        const churches = await this.prisma.church.findMany({
+      // If not super admin, check church membership
+      if (!isSuperAdmin) {
+        const currentUserMembership = await this.prisma.churchMember.findFirst({
           where: {
-            church_name: { contains: churchName, mode: 'insensitive' },
+            user_id: currentUserId,
+            status: 'ACTIVE',
             deleted_at: null,
           },
-          select: { id: true },
+          include: {
+            church: true,
+          },
         });
-        churchIds = churches.map((church) => church.id);
 
-        if (churchIds.length === 0) {
-          return {
-            data: [],
-            total: 0,
-            page,
-            limit,
-            totalPages: 0,
-          };
+        if (!currentUserMembership) {
+          throw new ForbiddenException('You are not a member of any church');
+        }
+
+        // Get church IDs based on church name filter
+        if (churchName) {
+          const churches = await this.prisma.church.findMany({
+            where: {
+              church_name: { contains: churchName, mode: 'insensitive' },
+              deleted_at: null,
+            },
+            select: { id: true },
+          });
+          churchIds = churches.map((church) => church.id);
+
+          if (churchIds.length === 0) {
+            return {
+              data: [],
+              total: 0,
+              page,
+              limit,
+              totalPages: 0,
+            };
+          }
+        } else {
+          churchIds = [currentUserMembership.church_id];
         }
       } else {
-        churchIds = [currentUserMembership.church_id];
+        // Super admin - get church IDs based on church name filter or all churches
+        if (churchName) {
+          const churches = await this.prisma.church.findMany({
+            where: {
+              church_name: { contains: churchName, mode: 'insensitive' },
+              deleted_at: null,
+            },
+            select: { id: true },
+          });
+          churchIds = churches.map((church) => church.id);
+
+          if (churchIds.length === 0) {
+            return {
+              data: [],
+              total: 0,
+              page,
+              limit,
+              totalPages: 0,
+            };
+          }
+        }
+        // If no churchName filter, super admin sees all churches
+        // Leave churchIds empty to get all pro users
       }
     } else {
       // Logged-out user: show pro users from all churches or filter by church name
@@ -120,6 +160,7 @@ export class ProUserService {
           user: {
             type: 'PRO_USER',
             status: 'ACTIVE',
+            deleted_at: null,
           },
         },
         select: {
@@ -129,7 +170,7 @@ export class ProUserService {
       });
       proUserIds = churchMemberIds.map((m) => m.user_id);
     } else {
-      // If no church filter and user is logged out, get all pro users
+      // If no church filter and user is super admin or logged out, get all pro users
       const allProUsers = await this.prisma.user.findMany({
         where: {
           type: 'PRO_USER',
@@ -191,6 +232,9 @@ export class ProUserService {
       },
     });
 
+    // ❌ REMOVE THIS LINE - It's incorrectly placed outside the map
+    // const shouldHideAddress = user.hide_address === true;
+
     // Calculate average rating and map to DTO
     const data = await Promise.all(
       users.map(async (user) => {
@@ -221,7 +265,7 @@ export class ProUserService {
           ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
           : null;
 
-        // Handle address visibility
+        // ✅ Handle address visibility - Check if hide_address is true
         const shouldHideAddress = user.hide_address === true;
 
         // Create the DTO object with address handling
@@ -237,17 +281,19 @@ export class ProUserService {
           location: {
             distance: locationData.distance,
             unit: 'mi',
-            // Hide location details if hide_address is true
+            // ✅ Hide location details if hide_address is true
             city: shouldHideAddress ? undefined : locationData.city,
             state: shouldHideAddress ? undefined : user.state,
             zipCode: shouldHideAddress ? undefined : user.zip_code,
-            // Add a flag to indicate address is hidden
+            // ✅ Add a flag to indicate address is hidden
             isAddressHidden: shouldHideAddress,
           },
           avatar: avatarUrl,
           description: user.description,
-          // Add work_globally flag to DTO
+          // ✅ Add work_globally flag to DTO
           workGlobally: user.work_globally || false,
+          // ✅ Add hideAddress flag to DTO
+          hideAddress: shouldHideAddress,
         };
 
         // Add churchName if available
@@ -288,149 +334,172 @@ export class ProUserService {
   }
 
   async findOne(id: string, currentUserId: string) {
-    // First, get the current user's church membership
-    const currentUserMembership = await this.prisma.churchMember.findFirst({
+    // Check if the user is a SUPER_ADMIN
+    const currentUser = await this.prisma.user.findUnique({
       where: {
-        user_id: currentUserId,
-        status: 'ACTIVE',
+        id: currentUserId,
         deleted_at: null,
+      },
+      select: {
+        type: true,
       },
     });
 
-    if (!currentUserMembership) {
-      throw new ForbiddenException('You are not a member of any church');
-    }
+    const isSuperAdmin = currentUser?.type === 'SUPER_ADMIN';
 
-    const churchId = currentUserMembership.church_id;
-
-    // Check if the requested pro user belongs to the same church
-    const proUserMembership = await this.prisma.churchMember.findFirst({
-      where: {
-        user_id: id,
-        church_id: churchId,
-        status: 'ACTIVE',
-        deleted_at: null,
-        user: {
-          type: 'PRO_USER',
+    // If not super admin, check church membership
+    if (!isSuperAdmin) {
+      const currentUserMembership = await this.prisma.churchMember.findFirst({
+        where: {
+          user_id: currentUserId,
+          status: 'ACTIVE',
+          deleted_at: null,
         },
-      },
-      include: {
-        user: {
-          include: {
-            skills: true,
+      });
+
+      if (!currentUserMembership) {
+        throw new ForbiddenException('You are not a member of any church');
+      }
+
+      const churchId = currentUserMembership.church_id;
+
+      // Check if the requested pro user belongs to the same church
+      const proUserMembership = await this.prisma.churchMember.findFirst({
+        where: {
+          user_id: id,
+          church_id: churchId,
+          status: 'ACTIVE',
+          deleted_at: null,
+          user: {
+            type: 'PRO_USER',
           },
         },
+        include: {
+          user: {
+            include: {
+              skills: true,
+            },
+          },
+          church: true,
+        },
+      });
+
+      if (!proUserMembership) {
+        throw new NotFoundException(
+          `Pro user with ID ${id} not found in your church`,
+        );
+      }
+
+      return this.formatProUserDetails(
+        proUserMembership.user,
+        proUserMembership.church,
+      );
+    }
+
+    // Super admin - can view any pro user
+    const proUser = await this.prisma.user.findFirst({
+      where: {
+        id: id,
+        type: 'PRO_USER',
+        status: 'ACTIVE',
+        deleted_at: null,
+      },
+      include: {
+        skills: true,
+      },
+    });
+
+    if (!proUser) {
+      throw new NotFoundException(`Pro user with ID ${id} not found`);
+    }
+
+    // Get church info for super admin view
+    const churchMembership = await this.prisma.churchMember.findFirst({
+      where: {
+        user_id: id,
+        status: 'ACTIVE',
+        deleted_at: null,
+      },
+      include: {
         church: true,
       },
     });
 
-    if (!proUserMembership) {
-      throw new NotFoundException(
-        `Pro user with ID ${id} not found in your church`,
-      );
-    }
-
-    const user = proUserMembership.user;
-    const ratingData = await this.getUserRating(user.id);
-
-    // Import TanvirStorage or your storage utility at the top of the file
-    // import { TanvirStorage } from 'path-to-tanvir-storage';
-    // import { appConfig } from 'path-to-app-config';
-
-    // Format avatar URL if exists
-    const avatarUrl = user.avatar
-      ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
-      : null;
-
-    // Format portfolio images URLs
-    const portfolioImageUrls =
-      user.portfolio_images?.map((fileName) =>
-        TanvirStorage.url(`${appConfig().storageUrl.portfolio}/${fileName}`),
-      ) || [];
-
-    return {
-      id: user.id,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      fullName: `${user.first_name} ${user.last_name}`,
-      companyName: user.company_name,
-      profession: user.profession,
-      rating: ratingData.averageRating,
-      reviewCount: ratingData.reviewCount,
-      location: {
-        distance: 0,
-        unit: 'mi',
-        city: user.city || 'Little Elm',
-        state: user.state,
-        zipCode: user.zip_code,
-      },
-      avatar: avatarUrl, // Full URL
-      description: user.description,
-      businessEmail: user.business_email,
-      businessPhone: user.business_phone,
-      website: user.website,
-      whatsappNumber: user.whatsapp_number,
-      availableTime: user.available_time,
-      addressLine1: user.address_line1,
-      addressLine2: user.address_line2,
-      state: user.state,
-      country: user.country,
-      businessPortfolio: user.business_portfolio,
-      portfolioImages: portfolioImageUrls, // Full URLs
-      skills: user.skills.map((skill) => ({
-        id: skill.id,
-        skillName: skill.skill_name,
-      })),
-      aboutMe: user.about_me,
-      availability: user.availability,
-      churchName: proUserMembership.church.church_name,
-    };
+    return this.formatProUserDetails(proUser, churchMembership?.church);
   }
 
   async getFilterOptions(currentUserId: string) {
-    // Get current user's church
-    const currentUserMembership = await this.prisma.churchMember.findFirst({
+    // Check if the user is a SUPER_ADMIN
+    const currentUser = await this.prisma.user.findUnique({
       where: {
-        user_id: currentUserId,
-        status: 'ACTIVE',
+        id: currentUserId,
         deleted_at: null,
-      },
-    });
-
-    if (!currentUserMembership) {
-      throw new ForbiddenException('You are not a member of any church');
-    }
-
-    const churchId = currentUserMembership.church_id;
-
-    // Get all PRO_USER members from the same church
-    const churchMemberIds = await this.prisma.churchMember.findMany({
-      where: {
-        church_id: churchId,
-        status: 'ACTIVE',
-        deleted_at: null,
-        user: {
-          type: 'PRO_USER',
-          status: 'ACTIVE',
-        },
       },
       select: {
-        user_id: true,
+        type: true,
       },
     });
 
-    const proUserIds = churchMemberIds.map((m) => m.user_id);
+    const isSuperAdmin = currentUser?.type === 'SUPER_ADMIN';
+
+    let proUserIds: string[] = [];
+
+    if (isSuperAdmin) {
+      // Super admin - get all pro users
+      const allProUsers = await this.prisma.user.findMany({
+        where: {
+          type: 'PRO_USER',
+          status: 'ACTIVE',
+          deleted_at: null,
+        },
+        select: { id: true },
+      });
+      proUserIds = allProUsers.map((user) => user.id);
+    } else {
+      // Regular user - get pro users from their church
+      const currentUserMembership = await this.prisma.churchMember.findFirst({
+        where: {
+          user_id: currentUserId,
+          status: 'ACTIVE',
+          deleted_at: null,
+        },
+      });
+
+      if (!currentUserMembership) {
+        throw new ForbiddenException('You are not a member of any church');
+      }
+
+      const churchId = currentUserMembership.church_id;
+
+      const churchMemberIds = await this.prisma.churchMember.findMany({
+        where: {
+          church_id: churchId,
+          status: 'ACTIVE',
+          deleted_at: null,
+          user: {
+            type: 'PRO_USER',
+            status: 'ACTIVE',
+          },
+        },
+        select: {
+          user_id: true,
+        },
+      });
+
+      proUserIds = churchMemberIds.map((m) => m.user_id);
+    }
 
     if (proUserIds.length === 0) {
       return { services: [], professions: [], distances: [1, 3, 5, 7, 10] };
     }
 
-    // Get unique categories (services) from pro users in this church
+    // Get unique categories (services) from pro users
     const categoriesResult = await this.prisma.user.findMany({
       where: {
         id: { in: proUserIds },
         type: 'PRO_USER',
         status: 'ACTIVE',
+        deleted_at: null,
         category: { not: null },
       },
       select: { category: true },
@@ -440,12 +509,13 @@ export class ProUserService {
       .map((c) => c.category)
       .filter(Boolean) as string[];
 
-    // Get unique professions from pro users in this church
+    // Get unique professions from pro users
     const professionsResult = await this.prisma.user.findMany({
       where: {
         id: { in: proUserIds },
         type: 'PRO_USER',
         status: 'ACTIVE',
+        deleted_at: null,
         profession: { not: null },
       },
       select: { profession: true },
@@ -500,5 +570,76 @@ export class ProUserService {
       unit: 'mi',
       city: city || 'Little Elm',
     };
+  }
+
+  /**
+   * Format user data into ProUserDetailsDto
+   * Handles address visibility and image URL formatting
+   */
+  private async formatProUserDetails(
+    user: any,
+    church: any,
+  ): Promise<ProUserDetailsDto> {
+    // Format avatar URL if exists
+    const avatarUrl = user.avatar
+      ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
+      : null;
+
+    // Format portfolio images URLs
+    const portfolioImageUrls =
+      user.portfolio_images?.map((fileName: string) =>
+        TanvirStorage.url(`${appConfig().storageUrl.portfolio}/${fileName}`),
+      ) || [];
+
+    // Handle address visibility
+    const shouldHideAddress = user.hide_address === true;
+
+    // Get rating data - AWAIT here
+    const ratingData = await this.getUserRating(user.id);
+
+    // Create the DTO object
+    const result: ProUserDetailsDto = {
+      id: user.id,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      fullName: `${user.first_name} ${user.last_name}`,
+      companyName: user.company_name,
+      profession: user.profession,
+      rating: ratingData.averageRating,
+      reviewCount: ratingData.reviewCount,
+      location: {
+        distance: 0, // Will be updated by caller if needed
+        unit: 'mi',
+        city: shouldHideAddress ? undefined : user.city || 'Little Elm',
+        state: shouldHideAddress ? undefined : user.state,
+        zipCode: shouldHideAddress ? undefined : user.zip_code,
+        isAddressHidden: shouldHideAddress,
+      },
+      avatar: avatarUrl,
+      description: user.description,
+      businessEmail: user.business_email,
+      businessPhone: user.business_phone,
+      website: user.website,
+      whatsappNumber: user.whatsapp_number,
+      availableTime: user.available_time,
+      addressLine1: shouldHideAddress ? undefined : user.address_line1,
+      addressLine2: shouldHideAddress ? undefined : user.address_line2,
+      state: shouldHideAddress ? undefined : user.state,
+      country: shouldHideAddress ? undefined : user.country,
+      businessPortfolio: user.business_portfolio,
+      portfolioImages: portfolioImageUrls,
+      skills:
+        user.skills?.map((skill: any) => ({
+          id: skill.id,
+          skillName: skill.skill_name,
+        })) || [],
+      aboutMe: user.about_me,
+      availability: user.availability,
+      churchName: church?.church_name,
+      workGlobally: user.work_globally || false,
+      hideAddress: shouldHideAddress,
+    };
+
+    return result;
   }
 }

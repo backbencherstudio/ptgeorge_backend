@@ -186,6 +186,9 @@ export class ProUserDetailsDto extends ProUserListItemDto {
 
   @ApiProperty({ required: false })
   availability: string;
+
+  @ApiPropertyOptional()
+  churchName?: string;
 }
 
 export class ProUserListResponseDto {

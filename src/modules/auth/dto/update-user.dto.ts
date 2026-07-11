@@ -1,12 +1,13 @@
-// update-user.dto.ts
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsOptional,
   IsString,
   IsUrl,
   IsUUID,
+  ValidateIf,
 } from 'class-validator';
 import { UserType, UserStatus } from 'prisma/generated/enums';
 
@@ -39,7 +40,10 @@ export class UpdateUserDto {
     description: 'Email address',
   })
   @IsOptional()
-  @IsEmail()
+  @ValidateIf(
+    (o) => o.email !== undefined && o.email !== null && o.email !== '',
+  )
+  @IsEmail({}, { message: 'Invalid email format' })
   email?: string;
 
   @ApiPropertyOptional({ enum: UserType, description: 'User type' })
@@ -57,7 +61,6 @@ export class UpdateUserDto {
   @IsUUID()
   church_id?: string;
 
-  // ✅ ADD THIS - Role ID to assign
   @ApiPropertyOptional({ description: 'Role ID to assign to user' })
   @IsOptional()
   @IsUUID()
@@ -77,7 +80,13 @@ export class UpdateUserDto {
     description: 'Business email',
   })
   @IsOptional()
-  @IsEmail()
+  @ValidateIf(
+    (o) =>
+      o.business_email !== undefined &&
+      o.business_email !== null &&
+      o.business_email !== '',
+  )
+  @IsEmail({}, { message: 'Invalid business email format' })
   business_email?: string;
 
   @ApiPropertyOptional({
@@ -111,7 +120,10 @@ export class UpdateUserDto {
     description: 'Website',
   })
   @IsOptional()
-  @IsUrl()
+  @ValidateIf(
+    (o) => o.website !== undefined && o.website !== null && o.website !== '',
+  )
+  @IsUrl({}, { message: 'Invalid website URL format' })
   website?: string;
 
   @ApiPropertyOptional({
@@ -173,4 +185,20 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   other_locations?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Hide address from public profile',
+  })
+  @IsOptional()
+  @IsBoolean()
+  hide_address?: boolean;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Work globally',
+  })
+  @IsOptional()
+  @IsBoolean()
+  work_globally?: boolean;
 }

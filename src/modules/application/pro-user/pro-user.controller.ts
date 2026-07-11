@@ -10,6 +10,7 @@ import { ProUserService } from './pro-user.service';
 import { ProUserFilterDto } from './dto/pro-user.dto';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { SWAGGER_AUTH } from 'src/common/swagger/swagger-auth';
+import { Public } from 'src/common/guard/role/public.decorator';
 
 @ApiTags('Pro Users')
 @ApiBearerAuth(SWAGGER_AUTH.CHURCH_MEMBER)
@@ -19,14 +20,15 @@ export class ProUserController {
   constructor(private readonly proUserService: ProUserService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all pro users from my church with filters' })
+  @ApiOperation({ summary: 'Get all pro users from church with filters' })
   @ApiResponse({
     status: 200,
     description: 'Returns paginated list of pro users from the same church',
   })
   async findAll(@Query() filterDto: ProUserFilterDto, @Req() req: any) {
-    const userId = req.user.id;
-    const currentUserZipCode = req.user.zip_code || '75068';
+    const userId = req.user?.id || req.user?.userId || null; // Allow logged-out users
+    const currentUserZipCode =
+      req.user?.zip_code || filterDto.zipCode || '75068';
 
     const result = await this.proUserService.findAllWithFilters(
       filterDto,
@@ -47,6 +49,7 @@ export class ProUserController {
     };
   }
 
+  @Public()
   @Get('filter-options')
   @ApiOperation({
     summary: 'Get available filter options (services, professions, distances)',

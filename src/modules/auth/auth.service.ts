@@ -577,9 +577,11 @@ export class AuthService {
         whatsapp_number: 'whatsapp_number',
         available_time: 'available_time',
         description: 'description',
+        hide_address: 'hide_address',
+        work_globally: 'work_globally',
       };
 
-      // Only add fields that exist in updateUserDto
+      // Only add fields that exist in updateUserDto and are not undefined
       for (const [dtoField, dbField] of Object.entries(fieldMappings)) {
         if (updateUserDto[dtoField] !== undefined) {
           data[dbField] = updateUserDto[dtoField];
@@ -644,6 +646,9 @@ export class AuthService {
           whatsapp_number: true,
           available_time: true,
           description: true,
+          // NEW FIELDS - Add these to select
+          hide_address: true,
+          work_globally: true,
           updated_at: true,
         },
       });

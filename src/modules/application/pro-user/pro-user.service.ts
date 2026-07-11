@@ -19,7 +19,7 @@ export class ProUserService {
 
   async findAllWithFilters(
     filterDto: ProUserFilterDto,
-    currentUserId: string,
+    currentUserId: string | null,
     userZipCode?: string,
   ): Promise<{
     data: ProUserListItemDto[];
@@ -40,72 +40,106 @@ export class ProUserService {
     } = filterDto;
     const skip = (page - 1) * limit;
 
-    // First, get the current user's church membership
-    const currentUserMembership = await this.prisma.churchMember.findFirst({
-      where: {
-        user_id: currentUserId,
-        status: 'ACTIVE',
-        deleted_at: null,
-      },
-      include: {
-        church: true,
-      },
-    });
-
-    if (!currentUserMembership) {
-      throw new ForbiddenException('You are not a member of any church');
-    }
-
-    // Get church IDs based on church name filter
     let churchIds: string[] = [];
 
-    if (churchName) {
-      // If church name is provided, find all churches with that name
-      const churches = await this.prisma.church.findMany({
+    // Handle church filtering based on user authentication
+    if (currentUserId) {
+      // Logged-in user: get their church membership
+      const currentUserMembership = await this.prisma.churchMember.findFirst({
         where: {
-          church_name: { contains: churchName, mode: 'insensitive' },
+          user_id: currentUserId,
+          status: 'ACTIVE',
           deleted_at: null,
         },
-        select: {
-          id: true,
+        include: {
+          church: true,
         },
       });
 
-      churchIds = churches.map((church) => church.id);
+      if (!currentUserMembership) {
+        throw new ForbiddenException('You are not a member of any church');
+      }
 
-      // If no churches found with that name, return empty result
-      if (churchIds.length === 0) {
-        return {
-          data: [],
-          total: 0,
-          page,
-          limit,
-          totalPages: 0,
-        };
+      // Get church IDs based on church name filter
+      if (churchName) {
+        const churches = await this.prisma.church.findMany({
+          where: {
+            church_name: { contains: churchName, mode: 'insensitive' },
+            deleted_at: null,
+          },
+          select: { id: true },
+        });
+        churchIds = churches.map((church) => church.id);
+
+        if (churchIds.length === 0) {
+          return {
+            data: [],
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          };
+        }
+      } else {
+        churchIds = [currentUserMembership.church_id];
       }
     } else {
-      // If no church name filter, use the current user's church
-      churchIds = [currentUserMembership.church_id];
+      // Logged-out user: show pro users from all churches or filter by church name
+      if (churchName) {
+        const churches = await this.prisma.church.findMany({
+          where: {
+            church_name: { contains: churchName, mode: 'insensitive' },
+            deleted_at: null,
+          },
+          select: { id: true },
+        });
+        churchIds = churches.map((church) => church.id);
+
+        if (churchIds.length === 0) {
+          return {
+            data: [],
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          };
+        }
+      }
+      // If no churchName filter and user is logged out, show all pro users
     }
 
-    // Get all PRO_USER members from the specified churches
-    const churchMemberIds = await this.prisma.churchMember.findMany({
-      where: {
-        church_id: { in: churchIds },
-        status: 'ACTIVE',
-        deleted_at: null,
-        user: {
+    // Get PRO_USER members from the specified churches
+    let proUserIds: string[] = [];
+
+    if (churchIds.length > 0) {
+      const churchMemberIds = await this.prisma.churchMember.findMany({
+        where: {
+          church_id: { in: churchIds },
+          status: 'ACTIVE',
+          deleted_at: null,
+          user: {
+            type: 'PRO_USER',
+            status: 'ACTIVE',
+          },
+        },
+        select: {
+          user_id: true,
+          church_id: true,
+        },
+      });
+      proUserIds = churchMemberIds.map((m) => m.user_id);
+    } else {
+      // If no church filter and user is logged out, get all pro users
+      const allProUsers = await this.prisma.user.findMany({
+        where: {
           type: 'PRO_USER',
           status: 'ACTIVE',
+          deleted_at: null,
         },
-      },
-      select: {
-        user_id: true,
-        church_id: true,
-      },
-    });
-
-    const proUserIds = churchMemberIds.map((m) => m.user_id);
+        select: { id: true },
+      });
+      proUserIds = allProUsers.map((user) => user.id);
+    }
 
     if (proUserIds.length === 0) {
       return {
@@ -122,6 +156,7 @@ export class ProUserService {
       id: { in: proUserIds },
       type: 'PRO_USER',
       status: 'ACTIVE',
+      deleted_at: null,
     };
 
     if (search) {
@@ -160,9 +195,11 @@ export class ProUserService {
     const data = await Promise.all(
       users.map(async (user) => {
         const ratingData = await this.getUserRating(user.id);
+
+        // Get location data
         const locationData = await this.calculateDistance(
           user.zip_code,
-          userZipCode || filterDto.zipCode,
+          userZipCode || filterDto.zipCode || '75068',
           user.city || 'Little Elm',
           user.state,
         );
@@ -184,7 +221,10 @@ export class ProUserService {
           ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
           : null;
 
-        // Create the DTO object
+        // Handle address visibility
+        const shouldHideAddress = user.hide_address === true;
+
+        // Create the DTO object with address handling
         const dto: ProUserListItemDto = {
           id: user.id,
           firstName: user.first_name,
@@ -197,15 +237,20 @@ export class ProUserService {
           location: {
             distance: locationData.distance,
             unit: 'mi',
-            city: locationData.city,
-            state: user.state,
-            zipCode: user.zip_code,
+            // Hide location details if hide_address is true
+            city: shouldHideAddress ? undefined : locationData.city,
+            state: shouldHideAddress ? undefined : user.state,
+            zipCode: shouldHideAddress ? undefined : user.zip_code,
+            // Add a flag to indicate address is hidden
+            isAddressHidden: shouldHideAddress,
           },
-          avatar: avatarUrl, // Full URL
+          avatar: avatarUrl,
           description: user.description,
+          // Add work_globally flag to DTO
+          workGlobally: user.work_globally || false,
         };
 
-        // Add churchName if the DTO supports it (optional field)
+        // Add churchName if available
         if (userChurch?.church?.church_name) {
           (dto as any).churchName = userChurch.church.church_name;
         }
@@ -217,7 +262,11 @@ export class ProUserService {
     // Apply distance filter if specified
     let filteredData = data;
     if (distance) {
-      filteredData = data.filter((item) => item.location.distance <= distance);
+      filteredData = data.filter((item) => {
+        // If user works globally, always show them regardless of distance
+        if (item.workGlobally) return true;
+        return item.location.distance <= distance;
+      });
     }
 
     // Apply rating filter if specified
@@ -225,12 +274,16 @@ export class ProUserService {
       filteredData = filteredData.filter((item) => item.rating >= minRating);
     }
 
+    // Calculate pagination for filtered data
+    const filteredTotal = filteredData.length;
+    const paginatedData = filteredData.slice(skip, skip + limit);
+
     return {
-      data: filteredData,
-      total: filteredData.length,
+      data: paginatedData,
+      total: filteredTotal,
       page,
       limit,
-      totalPages: Math.ceil(filteredData.length / limit),
+      totalPages: Math.ceil(filteredTotal / limit),
     };
   }
 

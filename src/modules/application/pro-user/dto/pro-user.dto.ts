@@ -4,7 +4,7 @@ export class PaginationDto {
 }
 
 // dto/pro-user-filter.dto.ts
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -98,6 +98,9 @@ export class ProUserLocationDto {
 
   @ApiProperty({ required: false })
   zipCode?: string;
+
+  @ApiPropertyOptional()
+  isAddressHidden?: boolean;
 }
 
 export class ProUserListItemDto {
@@ -133,6 +136,12 @@ export class ProUserListItemDto {
 
   @ApiProperty({ required: false })
   description: string;
+
+  @ApiPropertyOptional()
+  workGlobally?: boolean;
+
+  @ApiPropertyOptional()
+  hideAddress?: boolean;
 }
 
 export class ProUserDetailsDto extends ProUserListItemDto {

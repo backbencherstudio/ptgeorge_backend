@@ -68,6 +68,8 @@ export class ProfileService {
         date_of_birth: true,
         availability: true,
         portfolio_images: true, // Added this to return full URLs
+        work_globally: true,
+        hide_address: true,
       },
     });
 

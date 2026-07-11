@@ -419,6 +419,9 @@ After registration:
         whatsapp_number: { type: 'string' },
         available_time: { type: 'string' },
         description: { type: 'string' },
+        // NEW FIELDS
+        hide_address: { type: 'boolean' },
+        work_globally: { type: 'boolean' },
         image: { type: 'string', format: 'binary' },
       },
     },

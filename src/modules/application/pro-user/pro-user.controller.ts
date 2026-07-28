@@ -19,6 +19,7 @@ import { Public } from 'src/common/guard/role/public.decorator';
 export class ProUserController {
   constructor(private readonly proUserService: ProUserService) {}
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all pro users from church with filters' })
   @ApiResponse({
@@ -49,16 +50,18 @@ export class ProUserController {
     };
   }
 
+  @Public()
   @Get('filter-options')
   @ApiOperation({
     summary: 'Get available filter options (services, professions, distances)',
   })
   @ApiResponse({
     status: 200,
-    description: 'Returns filter options for dropdowns',
+    description: 'Returns hierarchical filter options for dropdowns',
   })
   async getFilterOptions(@Req() req: any) {
-    const userId = req.user?.id || req.user?.userId;
+    // Get userId if authenticated, otherwise null
+    const userId = req.user?.id || req.user?.userId || null;
     const result = await this.proUserService.getFilterOptions(userId);
     return {
       success: true,
@@ -67,6 +70,7 @@ export class ProUserController {
     };
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get pro user details by ID' })
   @ApiResponse({
@@ -75,8 +79,7 @@ export class ProUserController {
   })
   @ApiResponse({ status: 404, description: 'Pro user not found' })
   async findOne(@Param('id') id: string, @Req() req: any) {
-    const userId = req.user.id;
-    const result = await this.proUserService.findOne(id, userId);
+    const result = await this.proUserService.findOne(id);
     return {
       success: true,
       message: 'Pro user details retrieved successfully',

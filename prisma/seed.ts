@@ -2020,7 +2020,528 @@ async function main() {
     }
     console.log(`  ✅ Created ${notificationsCreated} notifications`);
 
-    // Step 18: Display Summary
+    // Step 18: Seed Filter Options Hierarchy
+    console.log('\n📝 Step 18: Seeding filter options hierarchy...');
+
+    // Define the full hierarchy from the client data
+    const filterHierarchy = {
+      'Home Services': {
+        'Auto Body Repair': [
+          'Collision Damage Repair',
+          'Dent Repair (PDR)',
+          'Panel & Frame Straightening',
+          'Body Restoration',
+        ],
+        'Auto Paint': [
+          'Full Body Paint',
+          'Scratch & Paint Correction',
+          'Color Matching',
+        ],
+        'Auto Electrician': [
+          'Electrical Diagnostics',
+          'Battery & Charging Systems',
+          'ECU / Vehicle Computer Systems',
+          'Lighting & Wiring',
+          'Mobile Auto Electrician',
+        ],
+        'Auto Mechanic': [
+          'Engine Repair',
+          'Brake Systems',
+          'Transmission Repair',
+          'Vehicle Diagnostics',
+          'Mobile Auto Mechanic',
+        ],
+        'Tire & Wheel Technician': [
+          'Tire Replacement',
+          'Tire Repair',
+          'Wheel Balancing',
+        ],
+        Cleaner: [
+          'Deep Cleaning',
+          'Move-In / Move-Out Cleaning',
+          'Post-Construction Cleaning',
+        ],
+        'Window Cleaner': [
+          'Interior Window Cleaning',
+          'Exterior Window Cleaning',
+          'Residential Window Cleaning',
+          'Upper-Level / High Windows',
+        ],
+        'Gutter Cleaning Service': [
+          'Gutter Cleaning',
+          'Gutter Guard Installation',
+        ],
+        'Pressure Washing Service': [
+          'Driveway Washing',
+          'House Exterior Washing',
+          'Deck & Patio Washing',
+        ],
+        'Pool Technician (Maintenance)': [
+          'Pool Cleaning',
+          'Pool Maintenance',
+          'Chemical Balancing',
+        ],
+        Electrician: [
+          'Emergency Repairs',
+          'Panel Upgrades',
+          'EV Charger Installation',
+          'Lighting Systems',
+          'Smart Home Wiring',
+        ],
+        'HVAC Technician': [
+          'AC Repair',
+          'Heating Installation',
+          'Preventive Maintenance',
+        ],
+        Plumber: [
+          'Emergency Repairs',
+          'Leak Detection',
+          'Water Heater Installation',
+          'Drain Cleaning',
+        ],
+        Landscaper: ['Lawn Maintenance', 'Garden Design', 'Irrigation Systems'],
+        Painter: ['Interior Painting', 'Exterior Painting'],
+        Roofer: [
+          'Roof Repair',
+          'Roof Installation',
+          'Storm Damage Repair',
+          'Roof Inspection',
+        ],
+        'Fence Contractor': ['Fence Installation', 'Fence Repair'],
+        'Garage Door Technician': ['Garage Door Repair', 'Opener Installation'],
+        Handyman: ['Small Repairs', 'Furniture Assembly', 'General Home Fixes'],
+        'House Sitter': [
+          'Home Sitting (While Away)',
+          'Mail & Package Handling',
+          'Plant Care',
+          'Basic Home Checkups',
+        ],
+        'Child Sitter': [
+          'Babysitting (Short-Term)',
+          'In-Home Child Care',
+          'Evening / Weekend Sitting',
+        ],
+        'Senior Home Helper (Non-Medical)': [
+          'Daily Assistance',
+          'Errands Help',
+          'Companion Support',
+        ],
+        'Holiday Light Installer': ['Seasonal Installations'],
+        Locksmith: ['Emergency Lockout', 'Lock Installation', 'Re-Keying'],
+        Mover: ['Local Moving', 'Furniture Moving'],
+        'Pet Care Provider': ['Dog Walking', 'Pet Sitting', 'In-Home Pet Care'],
+        'Real Estate Broker / Agent (Independent)': [
+          'Home Buying & Selling',
+          'Rental Listings',
+          'Property Valuation',
+        ],
+        'Home Cook / Personal Cook': [
+          'Home-Cooked Meals',
+          'Weekly Meal Prep',
+          'Dietary / Special Meals',
+        ],
+        'Catering Service (Local / Independent)': [
+          'Home Events Catering',
+          'Small Parties',
+          'Private Events',
+        ],
+        'Private Chef': ['In-Home Dining', 'Special Occasions'],
+        'Home-Based Baker': ['Cakes & Desserts', 'Custom Orders'],
+        'Appliance Repair Technician': [
+          'Refrigerator Repair',
+          'Washer & Dryer Repair',
+          'Dishwasher Repair',
+          'Oven / Stove Repair',
+        ],
+        'Flooring Installer': [
+          'Tile Installation',
+          'Hardwood Flooring',
+          'Laminate / Vinyl Flooring',
+        ],
+        'Smart Home Technician': [
+          'Smart Device Installation',
+          'Smart Lock Setup',
+          'Smart Thermostat Setup',
+          'Home Automation Basics',
+        ],
+        'EV Charger Installer': [
+          'Home EV Charger Installation',
+          'Level 2 Charger Setup',
+        ],
+        'Home Internet & Wi-Fi Specialist': [
+          'Wi-Fi Optimization',
+          'Mesh Network Setup',
+          'Router Installation',
+        ],
+        'Short-Term Rental Turnover Service (Airbnb / VRBO)': [
+          'Airbnb Cleaning',
+          'Turnover Reset',
+          'Linen & Supplies',
+        ],
+      },
+      'Health & Care (Clinic / Private Practice Only)': {
+        'Allergy & Immunology Doctor': [
+          'Allergy Testing (Skin / Blood)',
+          'Allergy Treatment Plans',
+          'Environmental Allergies',
+          'Food Allergies',
+        ],
+        Caregiver: [
+          'Daily Living Support',
+          'Disability Support',
+          'In-Home Assistance',
+          'Senior Care',
+        ],
+        'Cardiologist (Clinic-Based / Preventive Only)': [
+          'Blood Pressure Management',
+          'Cholesterol Management',
+          'Heart Checkups (Non-Emergency)',
+          'Preventive Cardiac Care',
+        ],
+        'Dermatologist (Medical Skin, Hair & Nails)': [
+          'Acne & Eczema Treatment',
+          'Hair & Scalp Disorders',
+          'Skin Cancer Screening',
+          'Skin Conditions & Rashes',
+        ],
+        Dentist: [
+          'Cosmetic Dentistry',
+          'Emergency Dental Care',
+          'General Dentistry',
+          'Implant Dentistry',
+          'Oral Surgery',
+          'Orthodontics',
+          'Pediatric Dentistry',
+        ],
+        'ENT Doctor (Ear, Nose & Throat)': [
+          'Ear Infections & Hearing Issues',
+          'Sinus & Nasal Disorders',
+          'Throat & Voice Problems',
+          'Tonsils & Adenoids',
+        ],
+        'Eye Doctor (Ophthalmology / Optometry)': [
+          'Comprehensive Eye Exams',
+          'Diabetic Eye Exams',
+          'Eye Infections & Dry Eye',
+          'Vision Testing & Glasses',
+        ],
+        'General Doctor (Primary Care)': [
+          'Chronic Disease Management',
+          'Family Medicine',
+          'Internal Medicine',
+          'Preventive Care',
+          'Sleep Medicine',
+        ],
+        'Home Nurse (Private / Home-Based)': [
+          'Chronic Care Follow-Up',
+          'Home Visits',
+          'Medication Management',
+          'Post-Operative Care',
+        ],
+        'OB-GYN (Women’s Health)': [
+          'Fertility & Family Planning',
+          'Gynecology Services',
+          'Postpartum Care',
+          'Pregnancy & Prenatal Care',
+        ],
+        'Orthopedic Doctor (Musculoskeletal)': [
+          'Arthritis Management',
+          'Joint & Bone Pain',
+          'Non-Surgical Orthopedic Care',
+          'Sports Injuries',
+        ],
+        'Pediatrician (Children’s Doctor)': [
+          'Child Growth & Development',
+          'Childhood Illnesses',
+          'Newborn & Infant Care',
+          'Vaccination & Preventive Care',
+        ],
+        'Physical Therapist': [
+          'Injury Recovery',
+          'Mobility & Strength Therapy',
+          'Post-Surgery Rehabilitation',
+          'Sports Therapy',
+        ],
+        Therapist: [
+          'Anxiety & Depression Therapy',
+          'Marriage & Family Therapy',
+          'Mental Health Therapy',
+          'Trauma Therapy',
+        ],
+      },
+      'Education & Coaching (Independent Only)': {
+        Tutor: [
+          'Elementary Tutoring',
+          'High School Tutoring',
+          'Math Tutoring',
+          'Science Tutoring',
+          'English Tutoring',
+        ],
+        'Online Tutor': ['Online Homework Help', 'Online Subject Tutoring'],
+        'Exam Preparation Instructor': [
+          'SAT / ACT Prep',
+          'College Entrance Exams',
+          'Standardized Tests',
+        ],
+        'Language Tutor': ['ESL', 'English', 'Arabic', 'Spanish'],
+        'Career Coach': [
+          'Career Transition',
+          'Resume & Interview Coaching',
+          'Job Search Strategy',
+        ],
+        'Life Coach': [
+          'Personal Development',
+          'Confidence Building',
+          'Productivity Coaching',
+        ],
+      },
+      'Technology & Digital': {
+        'Web Developer': [
+          'WordPress Development',
+          'Front-End Development',
+          'Back-End Development',
+          'Custom Websites',
+        ],
+        'App Developer': ['Mobile Apps', 'Web Apps', 'Cross-Platform Apps'],
+        'IT Support Specialist': [
+          'System Setup',
+          'Network Support',
+          'Hardware & Software Support',
+        ],
+        'Cybersecurity Specialist': [
+          'Security Audits',
+          'Risk Assessment',
+          'Network Security',
+        ],
+        'Data Analyst': [
+          'Business Analytics',
+          'Reporting & Insights',
+          'Performance Analytics',
+        ],
+        'UI/UX Designer': [
+          'User Experience Design',
+          'User Interface Design',
+          'Product Design',
+        ],
+        'AI Software Developer': [
+          'AI Websites & Software',
+          'Custom AI Tools',
+          'Workflow Automation',
+        ],
+        'AI Mobile App Developer': ['AI-Powered Mobile Apps'],
+        'AI Chatbot Specialist': [
+          'Website Chatbots',
+          'Customer Support Bots',
+          'Lead Capture Bots',
+        ],
+        'AI Integration Specialist': [
+          'AI + CRM Integration',
+          'Automation Workflows',
+          'API Integrations',
+        ],
+      },
+      'Business & Finance': {
+        Accountant: [
+          'Small Business Accounting',
+          'Corporate Accounting',
+          'Financial Reporting',
+        ],
+        Bookkeeper: [
+          'Monthly Bookkeeping',
+          'QuickBooks',
+          'Accounts Payable & Receivable',
+        ],
+        'Tax Preparer': [
+          'Individual Taxes',
+          'Small Business Taxes',
+          'Self-Employed & Year-End Filing',
+        ],
+        'Financial Advisor': [
+          'Investment Planning',
+          'Retirement Planning',
+          'Wealth Management',
+        ],
+        'Payroll Specialist': [
+          'Payroll Processing',
+          'Multi-State Payroll',
+          'Compliance',
+        ],
+      },
+      'Legal Services': {
+        Lawyer: [
+          'Family Law',
+          'Business Law',
+          'Employment Law',
+          'Civil Litigation',
+        ],
+        'Immigration Consultant': [
+          'Family Immigration',
+          'Employment Visas',
+          'Citizenship & Naturalization',
+        ],
+        'Legal Advisor': ['Business Legal Advisory', 'Corporate Compliance'],
+        'Contract Specialist': [
+          'Business Contracts',
+          'Vendor & Partnership Agreements',
+          'Contract Negotiation',
+        ],
+        'Notary Public': [
+          'General Notary',
+          'Mobile Notary',
+          'Real Estate Documents',
+        ],
+      },
+      'Creative & Media': {
+        Photographer: [
+          'Wedding Photography',
+          'Product Photography',
+          'Real Estate Photography',
+        ],
+        Videographer: ['Event Videography', 'Corporate & Promotional Video'],
+        'Video Editor': [
+          'Short-Form Video',
+          'YouTube Editing',
+          'Social Media Video',
+        ],
+        'Graphic Designer': [
+          'Brand Identity',
+          'Logo Design',
+          'Print & Digital Design',
+          'Figma Designer',
+        ],
+        'Content Creator': ['Social Media Content', 'Brand Content'],
+        'UGC Video Creator (NEW)': [
+          'UGC Video Ads',
+          'Short Vertical Videos',
+          'Brand Testimonials',
+        ],
+        'Short-Form Video Strategist (NEW)': [
+          'Reels & TikTok Strategy',
+          'Content Hooks & Scripts',
+          'Posting Frameworks',
+        ],
+        'AI Content Designer (NEW)': [
+          'AI-Generated Visuals',
+          'AI Video Assets',
+          'Brand-Aligned AI Content',
+        ],
+        DJ: ['Events & Parties', 'Weddings'],
+        Musician: ['Live Performance', 'Studio Recording'],
+        Singer: ['Lead Vocalist', 'Worship Singer'],
+        'Music Producer': ['Beat Making', 'Audio Arrangement'],
+        'Music Instructor': ['Instrument Instruction', 'Vocal Coaching'],
+        'Composer / Songwriter': ['Songwriting', 'Music Composition'],
+        'Podcast Producer (NEW)': [
+          'Podcast Editing',
+          'Audio Cleanup',
+          'Publishing & Distribution',
+        ],
+      },
+      'Personal Grooming & Beauty': {
+        Barber: ["Men's Haircuts", 'Beard Grooming'],
+        'Hair Stylist / Hairdresser': [
+          "Women's Haircuts",
+          'Hair Coloring',
+          'Blowouts & Styling',
+        ],
+        'Nail Technician': ['Manicure', 'Pedicure', 'Gel & Acrylic Nails'],
+        'Makeup Artist': ['Event Makeup', 'Bridal Makeup'],
+        Esthetician: ['Facial Treatments', 'Skincare'],
+        'Waxing & Hair Removal Specialist': ['Waxing', 'Threading'],
+        'Lash & Brow Technician': ['Eyelash Extensions', 'Brow Shaping'],
+      },
+      'Freelancers & Remote Services': {
+        'Virtual Assistant': [
+          'Administrative Support',
+          'Executive Assistance',
+          'Customer Support',
+        ],
+        'Freelance Designer': [
+          'Graphic Design',
+          'UI/UX Design',
+          'Brand Design',
+        ],
+        'Freelance Developer': ['Front-End', 'Back-End', 'Full-Stack'],
+        'Content Writer': [
+          'SEO Writing',
+          'Blog & Article Writing',
+          'Website Copywriting',
+        ],
+        Translator: [
+          'Business Translation',
+          'Legal Translation',
+          'Medical Translation',
+        ],
+        'Remote Consultant': [
+          'Business Strategy',
+          'Marketing Consulting',
+          'Operations & Growth',
+        ],
+      },
+    };
+
+    // Helper to create or get record
+    async function getOrCreateService(name: string) {
+      let service = await prisma.serviceCategory.findUnique({
+        where: { name },
+      });
+      if (!service) {
+        service = await prisma.serviceCategory.create({ data: { name } });
+      }
+      return service;
+    }
+
+    async function getOrCreateProfession(serviceId: string, name: string) {
+      let profession = await prisma.profession.findFirst({
+        where: { serviceCategoryId: serviceId, name },
+      });
+      if (!profession) {
+        profession = await prisma.profession.create({
+          data: { name, serviceCategoryId: serviceId },
+        });
+      }
+      return profession;
+    }
+
+    async function getOrCreateSpecialty(professionId: string, name: string) {
+      let specialty = await prisma.specialty.findFirst({
+        where: { professionId, name },
+      });
+      if (!specialty) {
+        specialty = await prisma.specialty.create({
+          data: { name, professionId },
+        });
+      }
+      return specialty;
+    }
+
+    let servicesCreated = 0;
+    let professionsCreated = 0;
+    let specialtiesCreated = 0;
+
+    for (const [serviceName, professions] of Object.entries(filterHierarchy)) {
+      const service = await getOrCreateService(serviceName);
+      servicesCreated++;
+
+      for (const [professionName, specialties] of Object.entries(professions)) {
+        const profession = await getOrCreateProfession(
+          service.id,
+          professionName,
+        );
+        professionsCreated++;
+
+        for (const specialtyName of specialties) {
+          await getOrCreateSpecialty(profession.id, specialtyName);
+          specialtiesCreated++;
+        }
+      }
+    }
+
+    console.log(
+      `  ✅ Seeded ${servicesCreated} services, ${professionsCreated} professions, ${specialtiesCreated} specialties.`,
+    );
+
+    // Step 19: Display Summary
     console.log('\n' + '='.repeat(60));
     console.log('📊 SEEDING SUMMARY');
     console.log('='.repeat(60));

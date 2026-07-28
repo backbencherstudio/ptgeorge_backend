@@ -17,6 +17,7 @@ import appConfig from 'src/config/app.config';
 export class ProUserService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // pro-user.service.ts
   async findAllWithFilters(
     filterDto: ProUserFilterDto,
     currentUserId: string | null,
@@ -32,6 +33,7 @@ export class ProUserService {
       search,
       category,
       profession,
+      specialty, // ✅ Added specialty filter
       distance,
       minRating,
       churchName,
@@ -218,6 +220,11 @@ export class ProUserService {
       where.profession = { equals: profession, mode: 'insensitive' };
     }
 
+    // ✅ NEW: Filter by specialty (using Prisma's array contains)
+    if (specialty) {
+      where.specialties = { has: specialty };
+    }
+
     // Get total count
     const total = await this.prisma.user.count({ where });
 
@@ -231,9 +238,6 @@ export class ProUserService {
         skills: true,
       },
     });
-
-    // ❌ REMOVE THIS LINE - It's incorrectly placed outside the map
-    // const shouldHideAddress = user.hide_address === true;
 
     // Calculate average rating and map to DTO
     const data = await Promise.all(
@@ -265,7 +269,7 @@ export class ProUserService {
           ? TanvirStorage.url(`${appConfig().storageUrl.avatar}/${user.avatar}`)
           : null;
 
-        // ✅ Handle address visibility - Check if hide_address is true
+        // Handle address visibility - Check if hide_address is true
         const shouldHideAddress = user.hide_address === true;
 
         // Create the DTO object with address handling
@@ -281,18 +285,14 @@ export class ProUserService {
           location: {
             distance: locationData.distance,
             unit: 'mi',
-            // ✅ Hide location details if hide_address is true
             city: shouldHideAddress ? undefined : locationData.city,
             state: shouldHideAddress ? undefined : user.state,
             zipCode: shouldHideAddress ? undefined : user.zip_code,
-            // ✅ Add a flag to indicate address is hidden
             isAddressHidden: shouldHideAddress,
           },
           avatar: avatarUrl,
           description: user.description,
-          // ✅ Add work_globally flag to DTO
           workGlobally: user.work_globally || false,
-          // ✅ Add hideAddress flag to DTO
           hideAddress: shouldHideAddress,
         };
 
@@ -333,73 +333,11 @@ export class ProUserService {
     };
   }
 
-  async findOne(id: string, currentUserId: string) {
-    // Check if the user is a SUPER_ADMIN
-    const currentUser = await this.prisma.user.findUnique({
-      where: {
-        id: currentUserId,
-        deleted_at: null,
-      },
-      select: {
-        type: true,
-      },
-    });
-
-    const isSuperAdmin = currentUser?.type === 'SUPER_ADMIN';
-
-    // If not super admin, check church membership
-    if (!isSuperAdmin) {
-      const currentUserMembership = await this.prisma.churchMember.findFirst({
-        where: {
-          user_id: currentUserId,
-          status: 'ACTIVE',
-          deleted_at: null,
-        },
-      });
-
-      if (!currentUserMembership) {
-        throw new ForbiddenException('You are not a member of any church');
-      }
-
-      const churchId = currentUserMembership.church_id;
-
-      // Check if the requested pro user belongs to the same church
-      const proUserMembership = await this.prisma.churchMember.findFirst({
-        where: {
-          user_id: id,
-          church_id: churchId,
-          status: 'ACTIVE',
-          deleted_at: null,
-          user: {
-            type: 'PRO_USER',
-          },
-        },
-        include: {
-          user: {
-            include: {
-              skills: true,
-            },
-          },
-          church: true,
-        },
-      });
-
-      if (!proUserMembership) {
-        throw new NotFoundException(
-          `Pro user with ID ${id} not found in your church`,
-        );
-      }
-
-      return this.formatProUserDetails(
-        proUserMembership.user,
-        proUserMembership.church,
-      );
-    }
-
-    // Super admin - can view any pro user
+  // pro-user.service.ts
+  async findOne(id: string): Promise<ProUserDetailsDto> {
     const proUser = await this.prisma.user.findFirst({
       where: {
-        id: id,
+        id,
         type: 'PRO_USER',
         status: 'ACTIVE',
         deleted_at: null,
@@ -413,10 +351,10 @@ export class ProUserService {
       throw new NotFoundException(`Pro user with ID ${id} not found`);
     }
 
-    // Get church info for super admin view
+    // Get the user's active church membership
     const churchMembership = await this.prisma.churchMember.findFirst({
       where: {
-        user_id: id,
+        user_id: proUser.id,
         status: 'ACTIVE',
         deleted_at: null,
       },
@@ -425,11 +363,48 @@ export class ProUserService {
       },
     });
 
-    return this.formatProUserDetails(proUser, churchMembership?.church);
+    return this.formatProUserDetails(proUser, churchMembership?.church ?? null);
   }
 
-  async getFilterOptions(currentUserId: string) {
-    // Check if the user is a SUPER_ADMIN
+  // pro-user.service.ts
+  async getFilterOptions(currentUserId: string | null) {
+    // If no user ID provided, return all services without church filtering
+    if (!currentUserId) {
+      // Get all service categories from seeded tables
+      const serviceCategories = await this.prisma.serviceCategory.findMany({
+        include: {
+          professions: {
+            include: {
+              specialties: true,
+            },
+            orderBy: { name: 'asc' },
+          },
+        },
+        orderBy: { name: 'asc' },
+      });
+
+      const hierarchicalServices = serviceCategories.map((service) => ({
+        id: service.id,
+        name: service.name,
+        professions: service.professions.map((profession) => ({
+          id: profession.id,
+          name: profession.name,
+          specialties: profession.specialties.map((specialty) => ({
+            id: specialty.id,
+            name: specialty.name,
+          })),
+        })),
+      }));
+
+      const distances = [1, 3, 5, 7, 10];
+
+      return {
+        services: hierarchicalServices,
+        distances,
+      };
+    }
+
+    // Check if user is SUPER_ADMIN or regular
     const currentUser = await this.prisma.user.findUnique({
       where: {
         id: currentUserId,
@@ -445,7 +420,6 @@ export class ProUserService {
     let proUserIds: string[] = [];
 
     if (isSuperAdmin) {
-      // Super admin - get all pro users
       const allProUsers = await this.prisma.user.findMany({
         where: {
           type: 'PRO_USER',
@@ -456,7 +430,6 @@ export class ProUserService {
       });
       proUserIds = allProUsers.map((user) => user.id);
     } else {
-      // Regular user - get pro users from their church
       const currentUserMembership = await this.prisma.churchMember.findFirst({
         where: {
           user_id: currentUserId,
@@ -470,7 +443,6 @@ export class ProUserService {
       }
 
       const churchId = currentUserMembership.church_id;
-
       const churchMemberIds = await this.prisma.churchMember.findMany({
         where: {
           church_id: churchId,
@@ -485,50 +457,42 @@ export class ProUserService {
           user_id: true,
         },
       });
-
       proUserIds = churchMemberIds.map((m) => m.user_id);
     }
 
-    if (proUserIds.length === 0) {
-      return { services: [], professions: [], distances: [1, 3, 5, 7, 10] };
-    }
-
-    // Get unique categories (services) from pro users
-    const categoriesResult = await this.prisma.user.findMany({
-      where: {
-        id: { in: proUserIds },
-        type: 'PRO_USER',
-        status: 'ACTIVE',
-        deleted_at: null,
-        category: { not: null },
+    // Get hierarchy from seeded tables
+    const serviceCategories = await this.prisma.serviceCategory.findMany({
+      include: {
+        professions: {
+          include: {
+            specialties: true,
+          },
+          orderBy: { name: 'asc' },
+        },
       },
-      select: { category: true },
-      distinct: ['category'],
+      orderBy: { name: 'asc' },
     });
-    const services = categoriesResult
-      .map((c) => c.category)
-      .filter(Boolean) as string[];
 
-    // Get unique professions from pro users
-    const professionsResult = await this.prisma.user.findMany({
-      where: {
-        id: { in: proUserIds },
-        type: 'PRO_USER',
-        status: 'ACTIVE',
-        deleted_at: null,
-        profession: { not: null },
-      },
-      select: { profession: true },
-      distinct: ['profession'],
-    });
-    const professions = professionsResult
-      .map((p) => p.profession)
-      .filter(Boolean) as string[];
+    // Build the hierarchical response
+    const hierarchicalServices = serviceCategories.map((service) => ({
+      id: service.id,
+      name: service.name,
+      professions: service.professions.map((profession) => ({
+        id: profession.id,
+        name: profession.name,
+        specialties: profession.specialties.map((specialty) => ({
+          id: specialty.id,
+          name: specialty.name,
+        })),
+      })),
+    }));
 
-    // Distance options
     const distances = [1, 3, 5, 7, 10];
 
-    return { services, professions, distances };
+    return {
+      services: hierarchicalServices,
+      distances,
+    };
   }
 
   private async getUserRating(

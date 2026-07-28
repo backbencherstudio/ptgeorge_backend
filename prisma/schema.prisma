@@ -179,7 +179,40 @@ model User {
   // Review replies
   review_replies ReviewReply[]
 
+  specialties   String[]  @default([])
+
   @@map("users")
+}
+
+model ServiceCategory {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  professions Profession[]
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+}
+
+model Profession {
+  id               String       @id @default(cuid())
+  name             String
+  serviceCategory  ServiceCategory @relation(fields: [serviceCategoryId], references: [id])
+  serviceCategoryId String
+  specialties      Specialty[]
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+
+  @@unique([serviceCategoryId, name])
+}
+
+model Specialty {
+  id            String    @id @default(cuid())
+  name          String
+  profession    Profession @relation(fields: [professionId], references: [id])
+  professionId  String
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  @@unique([professionId, name])
 }
 
 // ==========================================

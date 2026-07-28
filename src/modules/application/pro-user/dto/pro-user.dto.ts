@@ -20,12 +20,20 @@ export class ProUserFilterDto {
   @ApiProperty({ required: false, description: 'Filter by service category' })
   @IsOptional()
   @IsString()
-  category?: string;
+  category?: string; // Maps to UI "Service"
 
-  @ApiProperty({ required: false, description: 'Filter by profession' })
+  @ApiProperty({
+    required: false,
+    description: 'Filter by profession/sub-category',
+  })
   @IsOptional()
   @IsString()
-  profession?: string;
+  profession?: string; // Maps to UI "Category"
+
+  @ApiProperty({ required: false, description: 'Filter by specialty' })
+  @IsOptional()
+  @IsString()
+  specialty?: string; // Maps to UI "Profession"
 
   @ApiProperty({ required: false, description: 'Filter by distance in miles' })
   @IsOptional()
